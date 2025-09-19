@@ -31,5 +31,5 @@ st.image(
 )
 
 st.markdown("---")
-st.info("Use the sidebar to navigate between different pages of the dashboard.")
+st.info("Use the sidebar to navigate between different pages of the dashboard :)")
 
