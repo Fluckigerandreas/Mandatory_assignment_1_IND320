@@ -4,17 +4,23 @@ import pandas as pd
 # Load data
 data = pd.read_csv("/workspaces/blank-app/open-meteo-subset.csv")
 
-st.title("Weather Data Table with First-Month Line Chart")
-
-# Display the full data table
-st.subheader("Imported Data")
+st.title("Weather Data Dashboard")
+st.subheader("Imported Data Table")
 st.dataframe(data)
 
-# --- Row-wise Line Chart for First Month ---
-st.subheader("First Month Weather Trend")
+# --- Row-wise line charts for the first month ---
+st.subheader("First Month Trends by Variable")
 
-# Assuming first row is the first month, drop non-numeric columns like 'Month' if present
-first_month = data.iloc[0:1, 1:]  # skip first column if it's 'Month' or a label
+# Convert 'time' to datetime
+data['time'] = pd.to_datetime(data['time'])
 
-# Transpose so the line chart reads each variable as a series
-st.line_chart(first_month.T, use_container_width=True)
+# Filter first month (January 2020)
+first_month = data[data['time'].dt.month == 1]
+
+# Drop the time column for plotting numeric variables
+numeric_data = first_month.drop(columns=['time'])
+
+# Display each variable as a small line chart
+for col in numeric_data.columns:
+    st.markdown(f"**{col}**")
+    st.line_chart(numeric_data[col], use_container_width=True)
