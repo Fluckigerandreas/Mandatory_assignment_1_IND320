@@ -15,13 +15,6 @@ st.subheader("Explore, Analyze, and Visualize Weather Data")
 st.markdown("""
 Welcome to the Weather Insights Dashboard!  
 This app allows you to explore weather patterns, track historical data, and make insightful visualizations.  
-
-Navigate through the pages to:
-- **Overview**: See key statistics and trends
-- **Temperature Analysis**: Explore daily and monthly temperature trends
-- **Precipitation Insights**: Analyze rainfall and snowfall patterns
-- **Forecasting**: Predict future weather trends
-- **Data Explorer**: Dive into raw weather datasets
 """)
 
 # Optional image or GIF for aesthetic front page
