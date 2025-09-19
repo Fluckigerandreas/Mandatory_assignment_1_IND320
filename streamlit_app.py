@@ -25,8 +25,10 @@ Navigate through the pages to:
 """)
 
 # Optional image or GIF for aesthetic front page
-st.image("https://images.unsplash.com/photo-1503264116251-35a269479413?auto=format&fit=crop&w=1200&q=80",
-         use_column_width=True)
+st.image(
+    "https://images.unsplash.com/photo-1503264116251-35a269479413?auto=format&fit=crop&w=1200&q=80",
+    use_container_width=True
+)
 
 st.markdown("---")
 st.info("Use the sidebar to navigate between different pages of the dashboard.")
