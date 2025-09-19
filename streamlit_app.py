@@ -31,14 +31,3 @@ st.image("https://images.unsplash.com/photo-1503264116251-35a269479413?auto=form
 st.markdown("---")
 st.info("Use the sidebar to navigate between different pages of the dashboard.")
 
-# Sidebar navigation hint
-st.sidebar.title("Navigation")
-st.sidebar.info("""
-Click on the pages below to explore weather data:
-- Overview
-- Temperature Analysis
-- Precipitation Insights
-- Forecasting
-- Data Explorer
-""")
-
