@@ -30,9 +30,7 @@ st.data_editor(
     column_config={
         "Values": st.column_config.LineChartColumn(
             "First Month Trend",
-            width="large",
-            #y_min=min(first_month[variables].min()),
-            #y_max=max(first_month[variables].max())
+            width="large"
         )
     },
     hide_index=True,
