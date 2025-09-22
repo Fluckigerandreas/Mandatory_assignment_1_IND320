@@ -1,26 +1,47 @@
 import streamlit as st
 import pandas as pd
 
-# Load data
-data = pd.read_csv("/workspaces/blank-app/open-meteo-subset.csv")
+st.set_page_config(page_title="First Month Weather Data")
 
-st.title("Weather Data Dashboard")
-st.subheader("Imported Data Table")
-st.dataframe(data)
+st.title("📊 First Month Weather Data")
 
-# --- Row-wise line charts for the first month ---
-st.subheader("First Month Trends by Variable")
+# --- Load Data ---
+@st.cache_data
+def load_data():
+    df = pd.read_csv("/workspaces/blank-app/open-meteo-subset.csv")
+    df['time'] = pd.to_datetime(df['time'])
+    return df
 
-# Convert 'time' to datetime
-data['time'] = pd.to_datetime(data['time'])
+df = load_data()
 
-# Filter first month (January 2020)
-first_month = data[data['time'].dt.month == 1]
+# --- Filter First Month ---
+first_month = df[df['time'].dt.month == 1].copy()
 
-# Drop the time column for plotting numeric variables
-numeric_data = first_month.drop(columns=['time'])
+st.subheader("Raw Imported Data")
+st.dataframe(df)
 
-# Display each variable as a small line chart
-for col in numeric_data.columns:
-    st.markdown(f"**{col}**")
-    st.line_chart(numeric_data[col], use_container_width=True)
+# --- Display First Month with Row-wise Line Charts ---
+st.subheader("First Month with Row-wise LineChartColumn")
+
+st.data_editor(
+    first_month,
+    column_config={
+        "temperature_2m (°C)": st.column_config.LineChartColumn(
+            "Temperature (°C)", width="medium", y_min=-10, y_max=10
+        ),
+        "precipitation (mm)": st.column_config.LineChartColumn(
+            "Precipitation (mm)", width="medium"
+        ),
+        "wind_speed_10m (m/s)": st.column_config.LineChartColumn(
+            "Wind Speed (m/s)", width="medium"
+        ),
+        "wind_gusts_10m (m/s)": st.column_config.LineChartColumn(
+            "Wind Gusts (m/s)", width="medium"
+        ),
+        "wind_direction_10m (°)": st.column_config.LineChartColumn(
+            "Wind Direction (°)", width="medium"
+        ),
+    },
+    hide_index=True,
+    use_container_width=True
+)
