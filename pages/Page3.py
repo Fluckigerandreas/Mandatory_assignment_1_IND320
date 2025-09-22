@@ -1,15 +1,7 @@
 import streamlit as st
 
-# --- Inject custom CSS for dark mode ---
-dark_theme = """
-    <style>
-        .stApp {
-            background-color: #0E1117;
-            color: #FAFAFA;
-        }
-        .stSelectbox label, .stMultiSelect label, .stSlider label {
-            color: #FAFAFA !important;
-        }
-    </style>
-"""
-st.markdown(dark_theme, unsafe_allow_html=True)
+st.image(
+    "https://i.imgflip.com/4/46e43q.jpg", 
+    caption="Batman slaps Robin – 'Plot your data properly!'",
+    use_container_width=True
+)
