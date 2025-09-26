@@ -3,7 +3,7 @@ import pandas as pd
 
 st.set_page_config(page_title="First Month Overview", page_icon="📈")
 
-st.title("📊 First Month Weather Overview")
+st.title("Imported data overview")
 
 # --- Load data ---
 @st.cache_data
@@ -14,6 +14,8 @@ def load_data():
 
 df = load_data()
 st.dataframe(df)
+
+st.title("📊 First Month Weather Overview")
 
 # --- Filter first month (January) ---
 first_month = df[df['time'].dt.month == 1].copy()
