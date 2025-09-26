@@ -13,7 +13,7 @@ def load_data():
     return df
 
 df = load_data()
-df['time'] = pd.to_datetime(df['time'])
+st.dataframe(df)
 
 # --- Filter first month (January) ---
 first_month = df[df['time'].dt.month == 1].copy()
