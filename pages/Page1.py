@@ -8,7 +8,7 @@ st.title("📊 First Month Weather Overview")
 # --- Load data ---
 @st.cache_data
 def load_data():
-    df = pd.read_csv("/workspaces/blank-app/open-meteo-subset.csv")
+    df = pd.read_csv("open-meteo-subset.csv")
     df['time'] = pd.to_datetime(df['time'])
     return df
 

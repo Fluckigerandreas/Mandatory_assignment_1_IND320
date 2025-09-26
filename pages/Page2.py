@@ -10,7 +10,7 @@ st.title("📊 Weather Data Visualization")
 # --- Load Data ---
 @st.cache_data
 def load_data():
-    df = pd.read_csv("/workspaces/blank-app/open-meteo-subset.csv")
+    df = pd.read_csv("open-meteo-subset.csv")
     df['time'] = pd.to_datetime(df['time'])
     df['month'] = df['time'].dt.to_period("M")  # extract year-month
     return df
