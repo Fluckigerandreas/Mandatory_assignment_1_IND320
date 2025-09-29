@@ -17,7 +17,7 @@ Welcome to the Weather Insights Dashboard!
 This Streamlit-app allows you to explore weather patterns, track historical data (from 2020), and make insightful visualizations.  
 """)
 
-# Optional image or GIF for aesthetic front page (Chose a nice nightsky)
+# Added a nice picture (Chose a nice nightsky)
 st.image(
     "https://images.unsplash.com/photo-1503264116251-35a269479413?auto=format&fit=crop&w=1200&q=80",
     use_container_width=True
