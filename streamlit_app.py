@@ -3,18 +3,25 @@ import streamlit as st
 
 # Page configuration
 st.set_page_config(
-    page_title="Weather Insights Dashboard",
-    page_icon="🌤️",
-    layout="wide"
+    page_title="Weather & Energy Insights Dashboard",
+    page_icon="🌤️"
 )
 
-# Front-page content
-st.title("🌦️ Weather Insights Dashboard")
-st.subheader("Explore, Analyze, and Visualize Weather Data")
-
 st.markdown("""
-Welcome to the Weather Insights Dashboard!  
-This Streamlit-app allows you to explore weather patterns, track historical data (from 2020), and make insightful visualizations.  
+# 🌤️ Weather & Energy Insights Dashboard
+
+Welcome! This interactive Streamlit app lets you explore **weather data** and **energy production data** through three pages:
+
+1. **First Month Overview** 📈  
+   View imported weather data and explore trends for the first month of the year. Interactive line charts show hourly patterns for each variable.
+
+2. **Weather Data Visualization** 📊  
+   Visualize weather variables over any month range. Select individual variables or view all at once, with clear, interactive Altair line charts.
+
+3. **Energy Production Dashboard** ⚡  
+   Analyze electricity production by price area and production group. Select price areas, production groups, and months to explore both pie charts (annual totals) and line plots (monthly hourly data). Data is loaded from **MongoDB** and visualized dynamically.
+
+Use the sidebar and interactive controls on each page to filter and customize your visualizations.
 """)
 
 # Added a nice picture (Chose a nice nightsky)
