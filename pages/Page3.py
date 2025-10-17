@@ -8,8 +8,8 @@ uri = st.secrets["mongo"]["uri"]
 ca = certifi.where()
 client = MongoClient(uri, tls=True, tlsCAFile=ca)
 
-db = client["energy_database"]
-collection = db["production_data"]
+df = client['example']
+collection = df['data']
 
 # ---------------------------------------------
 # 2. Load data from MongoDB into a DataFrame
