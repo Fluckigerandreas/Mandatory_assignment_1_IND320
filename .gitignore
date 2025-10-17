@@ -1,4 +1,6 @@
 .streamlit/secrets.toml
+[mongo]
+uri = "mongodb+srv://andreasnorway_db_user:yf8zL3Tsfm7GdfAU@cluster0.chffuae.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
