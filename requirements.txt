@@ -1,3 +1,6 @@
 streamlit
 pandas
 altair
+plotly
+pymongo
+certifi
