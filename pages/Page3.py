@@ -23,7 +23,6 @@ df = pd.DataFrame(data)
 
 # Convert date columns to datetime
 df["starttime"] = pd.to_datetime(df["starttime"])
-df["endtime"] = pd.to_datetime(df["endtime"])
 
 # ---------------------------------------------
 # 3. Streamlit layout: two columns
