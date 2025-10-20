@@ -22,13 +22,16 @@ df = pd.DataFrame(data)
 df["starttime"] = pd.to_datetime(df["starttime"])
 
 # --- Define custom colors per production group ---
+# Make sure these match the actual names in your data
 group_colors = {
     "hydro": "blue",
-    "wind": "orange",
+    "wind": "lightblue",
     "solar": "yellow",
     "thermal": "green",
     "other": "black"
 }
+
+# If your dataset has additional groups, assign default colors
 for group in df["productiongroup"].unique():
     if group not in group_colors:
         group_colors[group] = px.colors.qualitative.Pastel1[len(group_colors) % len(px.colors.qualitative.Pastel1)]
@@ -42,8 +45,9 @@ with col1:
     st.header("Total Production Pie Chart")
     st.subheader("Select Price Areas:")
 
-    # Horizontal checkboxes for price areas
     selected_areas = []
+
+    # Arrange checkboxes horizontally
     price_areas = df["pricearea"].unique()
     n_cols = min(4, len(price_areas))
     rows = (len(price_areas) + n_cols - 1) // n_cols
@@ -61,30 +65,29 @@ with col1:
     df_area = df[df["pricearea"].isin(selected_areas)]
     total_by_group = df_area.groupby(["productiongroup"])["quantitykwh"].sum().reset_index()
 
-    # Pie chart
+    # Pie chart with custom colors
     fig_pie = px.pie(
         total_by_group,
         names="productiongroup",
         values="quantitykwh",
         color="productiongroup",
         color_discrete_map=group_colors,
-        title="Total Production in Selected Price Area(s)",
+        title=f"Total Production in Selected Price Area(s)",
         width=600,
         height=600
     )
     fig_pie.update_traces(textposition="inside", textinfo="percent+label")
     st.plotly_chart(fig_pie, use_container_width=True)
 
-# --- RIGHT COLUMN: Pills for production groups + month selector + line plot ---
+# --- RIGHT COLUMN: Production group(s) + month + line chart ---
 with col2:
     st.header("Monthly Production Line Plot")
     
-    # Pills for production group selection
-    prod_groups_selected = st.pills(
+    # Multi-select for production groups
+    prod_groups_selected = st.multiselect(
         "Select production group(s):",
-        options=list(df["productiongroup"].unique()),
-        value=list(df["productiongroup"].unique()),
-        key="prod_pills"
+        df["productiongroup"].unique(),
+        default=df["productiongroup"].unique()
     )
     
     # Month selection
@@ -94,39 +97,26 @@ with col2:
         format_func=lambda x: pd.to_datetime(f"2021-{x}-01").strftime("%B")
     )
     
-    # Filter data by price area, production group, and month
+    # Filter data
     df_filtered = df_area[
         (df_area["productiongroup"].isin(prod_groups_selected)) &
         (df_area["starttime"].dt.month == month)
-    ].copy()
+    ]
     
     if df_filtered.empty:
-        st.warning("No data available for this selection.")
+        st.warning("No data for this selection.")
     else:
-        # Sort by group + time to avoid connecting lines
-        df_filtered = df_filtered.sort_values(by=["productiongroup", "pricearea", "starttime"])
-        # Unique line identifier
-        df_filtered["group_id"] = df_filtered["productiongroup"] + "_" + df_filtered["pricearea"]
-
-        # Line plot
         fig_line = px.line(
             df_filtered,
             x="starttime",
             y="quantitykwh",
             color="productiongroup",
-            line_group="group_id",  # prevents unwanted connecting lines
             markers=True,
             color_discrete_map=group_colors,
+            line_group="",
             title=f"Hourly Production ({pd.to_datetime(f'2021-{month}-01').strftime('%B')})",
             width=900,
             height=500
-        )
-        fig_line.update_layout(
-            xaxis_title="Time",
-            yaxis_title="Quantity (kWh)",
-            xaxis=dict(showgrid=True),
-            yaxis=dict(showgrid=True),
-            legend_title="Production Group"
         )
         st.plotly_chart(fig_line, use_container_width=True)
 
