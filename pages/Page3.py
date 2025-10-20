@@ -25,7 +25,7 @@ df["starttime"] = pd.to_datetime(df["starttime"])
 # Make sure these match the actual names in your data
 group_colors = {
     "hydro": "blue",
-    "wind": "orange",
+    "wind": "lightblue",
     "solar": "yellow",
     "thermal": "green",
     "other": "black"
