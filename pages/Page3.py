@@ -22,16 +22,13 @@ df = pd.DataFrame(data)
 df["starttime"] = pd.to_datetime(df["starttime"])
 
 # --- Define custom colors per production group ---
-# Make sure these match the actual names in your data
 group_colors = {
-    "hydro": "blue",
-    "wind": "orange",
-    "solar": "yellow",
-    "thermal": "green",
-    "other": "black"
+    "Hydro": "blue",
+    "Wind": "orange",
+    "Solar": "yellow",
+    "Biomass": "green"
 }
 
-# If your dataset has additional groups, assign default colors
 for group in df["productiongroup"].unique():
     if group not in group_colors:
         group_colors[group] = px.colors.qualitative.Pastel1[len(group_colors) % len(px.colors.qualitative.Pastel1)]
@@ -65,7 +62,7 @@ with col1:
     df_area = df[df["pricearea"].isin(selected_areas)]
     total_by_group = df_area.groupby(["productiongroup"])["quantitykwh"].sum().reset_index()
 
-    # Pie chart with custom colors
+    # Pie chart
     fig_pie = px.pie(
         total_by_group,
         names="productiongroup",
@@ -79,32 +76,33 @@ with col1:
     fig_pie.update_traces(textposition="inside", textinfo="percent+label")
     st.plotly_chart(fig_pie, use_container_width=True)
 
-# --- RIGHT COLUMN: Production group(s) + month + line chart ---
+# --- RIGHT COLUMN: Pills for production groups + month selector + line plot ---
 with col2:
     st.header("Monthly Production Line Plot")
     
-    # Multi-select for production groups
-    prod_groups_selected = st.multiselect(
+    # Pills for production group selection
+    prod_groups_selected = st.pills(
         "Select production group(s):",
-        df["productiongroup"].unique(),
-        default=df["productiongroup"].unique()
+        options=list(df["productiongroup"].unique()),
+        value=list(df["productiongroup"].unique()),
+        key="prod_pills"
     )
     
-    # Month selection
+    # Month selector (dropdown)
     month = st.selectbox(
         "Select a month:",
         list(range(1, 13)),
         format_func=lambda x: pd.to_datetime(f"2021-{x}-01").strftime("%B")
     )
     
-    # Filter data
+    # Filter data for selected month, price area(s), and production group(s)
     df_filtered = df_area[
         (df_area["productiongroup"].isin(prod_groups_selected)) &
         (df_area["starttime"].dt.month == month)
     ]
     
     if df_filtered.empty:
-        st.warning("No data for this selection.")
+        st.warning("No data available for this selection.")
     else:
         fig_line = px.line(
             df_filtered,
@@ -113,9 +111,14 @@ with col2:
             color="productiongroup",
             markers=True,
             color_discrete_map=group_colors,
-            title=f"Hourly Production ({pd.to_datetime(f'2021-{month}-01').strftime('%B')})",
-            width=900,
-            height=500
+            title=f"Hourly Production ({pd.to_datetime(f'2021-{month}-01').strftime('%B')})"
+        )
+        fig_line.update_layout(
+            xaxis_title="Time",
+            yaxis_title="Quantity (kWh)",
+            xaxis=dict(showgrid=True),
+            yaxis=dict(showgrid=True),
+            legend_title="Production Group"
         )
         st.plotly_chart(fig_line, use_container_width=True)
 
@@ -126,3 +129,4 @@ with st.expander("Data Source"):
     containing hourly electricity production per price area and production group. 
     Data has been loaded into MongoDB and visualized interactively here.
     """)
+
