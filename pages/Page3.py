@@ -106,6 +106,9 @@ with col2:
     if df_filtered.empty:
         st.warning("No data for this selection.")
     else:
+        # Create a unique group ID per production group + price area
+        df_filtered["group_id"] = df_filtered["productiongroup"] + "_" + df_filtered["pricearea"]
+
         fig_line = px.line(
             df_filtered,
             x="starttime",
@@ -113,10 +116,17 @@ with col2:
             color="productiongroup",
             markers=True,
             color_discrete_map=group_colors,
-            line_group="productiongroup",
+            line_group="group_id",  # fixes the unwanted connecting line
             title=f"Hourly Production ({pd.to_datetime(f'2021-{month}-01').strftime('%B')})",
             width=900,
             height=500
+        )
+        fig_line.update_layout(
+            xaxis_title="Time",
+            yaxis_title="Quantity (kWh)",
+            xaxis=dict(showgrid=True),
+            yaxis=dict(showgrid=True),
+            legend_title="Production Group"
         )
         st.plotly_chart(fig_line, use_container_width=True)
 
