@@ -114,7 +114,7 @@ with col2:
             markers=True,
             color_discrete_map=group_colors,
             title=f"Hourly Production ({pd.to_datetime(f'2021-{month}-01').strftime('%B')})",
-            width=700,
+            width=900,
             height=500
         )
         st.plotly_chart(fig_line, use_container_width=True)
