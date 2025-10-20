@@ -113,7 +113,6 @@ with col2:
             color="productiongroup",
             markers=True,
             color_discrete_map=group_colors,
-            line_group="",
             title=f"Hourly Production ({pd.to_datetime(f'2021-{month}-01').strftime('%B')})",
             width=900,
             height=500
