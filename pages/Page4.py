@@ -1,7 +1,7 @@
 import streamlit as st
 
 st.image(
-    "https://i.imgflip.com/4/46e43q.jpg", 
+    "/workspaces/blank-app/a9my9i.jpg", 
     caption="",
     use_container_width=True
 )
