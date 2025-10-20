@@ -1,65 +1,103 @@
 import streamlit as st
 import pandas as pd
+from pymongo import MongoClient
+import certifi
 import plotly.express as px
 
-# --- Load your dataset ---
-# Replace with your actual data loading
-df = pd.read_csv("production_data.csv", parse_dates=["startTime"])
+# --- MongoDB connection ---
+uri = st.secrets["mongo"]["uri"]
+ca = certifi.where()
+client = MongoClient(uri, tls=True, tlsCAFile=ca)
 
-st.set_page_config(page_title="Page Four: Energy Analysis", layout="wide")
-st.title("Energy Production Overview")
+db = client['example']
+collection = db['data']
 
-# --- Split page into two columns ---
+# --- Load data ---
+data = list(collection.find())
+if not data:
+    st.error("No data found in MongoDB.")
+    st.stop()
+
+df = pd.DataFrame(data)
+df["starttime"] = pd.to_datetime(df["starttime"])
+
+# --- Streamlit layout ---
+st.title("Energy Production Dashboard")
 col1, col2 = st.columns(2)
 
-# --- LEFT COLUMN: Pie chart by price area ---
+# --- LEFT COLUMN: Price area selection + pie chart ---
 with col1:
-    st.subheader("Total Production by Price Area")
-    price_areas = df['priceArea'].unique()
-    selected_area = st.radio("Select a Price Area:", price_areas)
+    st.header("Total Production Pie Chart")
+    st.subheader("Select Price Areas:")
+
+    selected_areas = []
+
+    # Multiple radio buttons simulation
+    for area in df["pricearea"].unique():
+        choice = st.radio(f"{area}:", ["Exclude", "Include"], index=0, key=f"radio_{area}")
+        if choice == "Include":
+            selected_areas.append(area)
+
+    if not selected_areas:
+        st.warning("Please select at least one price area.")
+        st.stop()
 
     # Filter and aggregate
-    pie_data = df[df['priceArea'] == selected_area].groupby('productionGroup')['quantityKwh'].sum().reset_index()
+    df_area = df[df["pricearea"].isin(selected_areas)]
+    total_by_group = df_area.groupby(["pricearea", "productiongroup"])["quantitykwh"].sum().reset_index()
 
-    # Plot pie chart using Plotly
-    fig1 = px.pie(pie_data, names='productionGroup', values='quantityKwh',
-                  title=f"Total Production in {selected_area}")
-    st.plotly_chart(fig1, use_container_width=True)
+    # Pie chart
+    fig_pie = px.pie(
+        total_by_group,
+        names="productiongroup",
+        values="quantitykwh",
+        color="pricearea" if len(selected_areas) > 1 else None,
+        title=f"Total Production in Selected Price Area(s)"
+    )
+    fig_pie.update_traces(textposition="inside", textinfo="percent+label")
+    st.plotly_chart(fig_pie, use_container_width=True)
 
-# --- RIGHT COLUMN: Line plot by production group(s) and month ---
+# --- RIGHT COLUMN: Production group(s) + month + line chart ---
 with col2:
-    st.subheader("Monthly Production Trends")
+    st.header("Monthly Production Line Plot")
     
-    # Production group selection
-    production_groups = df['productionGroup'].unique()
-    selected_groups = st.multiselect("Select Production Groups:", production_groups, default=production_groups)
+    # Multi-select for production groups
+    prod_groups = st.multiselect(
+        "Select production group(s):",
+        df["productiongroup"].unique(),
+        default=df["productiongroup"].unique()
+    )
     
     # Month selection
-    months = df['startTime'].dt.month.unique()
-    selected_month = st.selectbox("Select Month:", sorted(months))
+    month = st.selectbox(
+        "Select a month:",
+        list(range(1, 13)),
+        format_func=lambda x: pd.to_datetime(f"2021-{x}-01").strftime("%B")
+    )
     
     # Filter data
-    df_filtered = df[
-        (df['priceArea'] == selected_area) &
-        (df['productionGroup'].isin(selected_groups)) &
-        (df['startTime'].dt.month == selected_month)
+    df_filtered = df_area[
+        (df_area["productiongroup"].isin(prod_groups)) &
+        (df_area["starttime"].dt.month == month)
     ]
     
-    # Aggregate per day
-    df_filtered['day'] = df_filtered['startTime'].dt.day
-    line_data = df_filtered.groupby(['day', 'productionGroup'])['quantityKwh'].sum().reset_index()
+    if df_filtered.empty:
+        st.warning("No data for this selection.")
+    else:
+        fig_line = px.line(
+            df_filtered,
+            x="starttime",
+            y="quantitykwh",
+            color="productiongroup",
+            markers=True,
+            title=f"Hourly Production ({pd.to_datetime(f'2021-{month}-01').strftime('%B')})"
+        )
+        st.plotly_chart(fig_line, use_container_width=True)
 
-    # Plot line chart using Plotly
-    fig2 = px.line(line_data, x='day', y='quantityKwh', color='productionGroup',
-                   markers=True,
-                   title=f"Daily Production in {selected_area} - Month {selected_month}")
-    st.plotly_chart(fig2, use_container_width=True)
-
-# --- Expander with data source ---
+# --- Expander for data source ---
 with st.expander("Data Source"):
     st.write("""
-    The production data shown on this page is sourced from [your data source name], 
-    which provides hourly energy production per price area and production group.
-    Data is aggregated here by production group and day for visualization purposes.
+    The data displayed in this dashboard is sourced from the ELHUB API, 
+    containing hourly electricity production per price area and production group. 
+    Data has been loaded into MongoDB and visualized interactively here.
     """)
-
