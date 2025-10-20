@@ -21,8 +21,13 @@ if not data:
 df = pd.DataFrame(data)
 df["starttime"] = pd.to_datetime(df["starttime"])
 
+# --- Remove duplicates (fix NO1 duplicate issue) ---
+df = df.drop_duplicates(subset=["pricearea", "productiongroup", "starttime"], keep="first").reset_index(drop=True)
+
+# Optional: feedback to confirm cleaning
+st.caption(f"✅ Loaded {len(df)} unique records after removing duplicates.")
+
 # --- Define custom colors per production group ---
-# Make sure these match the actual names in your data
 group_colors = {
     "hydro": "blue",
     "wind": "lightblue",
@@ -31,18 +36,22 @@ group_colors = {
     "other": "black"
 }
 
-# If your dataset has additional groups, assign default colors
+# Add fallback colors for unexpected groups
 for group in df["productiongroup"].unique():
     if group not in group_colors:
-        group_colors[group] = px.colors.qualitative.Pastel1[len(group_colors) % len(px.colors.qualitative.Pastel1)]
+        group_colors[group] = px.colors.qualitative.Pastel1[
+            len(group_colors) % len(px.colors.qualitative.Pastel1)
+        ]
 
 # --- Streamlit layout ---
-st.title("Energy Production Dashboard")
+st.title("⚡ Energy Production Dashboard")
 col1, col2 = st.columns(2)
 
-# --- LEFT COLUMN: Price area selection + pie chart ---
+# -------------------------------
+# LEFT COLUMN: Price area + Pie Chart
+# -------------------------------
 with col1:
-    st.header("Total Production Pie Chart")
+    st.header("Total Production per Price Area")
     st.subheader("Select Price Areas:")
 
     selected_areas = []
@@ -63,46 +72,48 @@ with col1:
         st.stop()
 
     df_area = df[df["pricearea"].isin(selected_areas)]
-    total_by_group = df_area.groupby(["productiongroup"])["quantitykwh"].sum().reset_index()
+    total_by_group = df_area.groupby("productiongroup")["quantitykwh"].sum().reset_index()
 
-    # Pie chart with custom colors
+    # Pie chart
     fig_pie = px.pie(
         total_by_group,
         names="productiongroup",
         values="quantitykwh",
         color="productiongroup",
         color_discrete_map=group_colors,
-        title=f"Total Production in Selected Price Area(s)",
+        title="Total Production in Selected Price Area(s)",
         width=600,
         height=600
     )
     fig_pie.update_traces(textposition="inside", textinfo="percent+label")
     st.plotly_chart(fig_pie, use_container_width=True)
 
-# --- RIGHT COLUMN: Production group(s) + month + line chart ---
+# -------------------------------
+# RIGHT COLUMN: Line Chart by Month and Group
+# -------------------------------
 with col2:
     st.header("Monthly Production Line Plot")
-    
-    # Multi-select for production groups
+
+    # Production group selection (pills style)
     prod_groups_selected = st.multiselect(
         "Select production group(s):",
         df["productiongroup"].unique(),
         default=df["productiongroup"].unique()
     )
-    
+
     # Month selection
     month = st.selectbox(
         "Select a month:",
         list(range(1, 13)),
         format_func=lambda x: pd.to_datetime(f"2021-{x}-01").strftime("%B")
     )
-    
+
     # Filter data
     df_filtered = df_area[
         (df_area["productiongroup"].isin(prod_groups_selected)) &
         (df_area["starttime"].dt.month == month)
-    ]
-    
+    ].sort_values("starttime")
+
     if df_filtered.empty:
         st.warning("No data for this selection.")
     else:
@@ -117,12 +128,16 @@ with col2:
             width=900,
             height=500
         )
+
+        # Make sure no line jumps between discontinuous points
+        fig_line.update_traces(connectgaps=False)
         st.plotly_chart(fig_line, use_container_width=True)
 
-# --- Expander for data source ---
-with st.expander("Data Source"):
+# -------------------------------
+# Data Source Info
+# -------------------------------
+with st.expander("ℹ️ Data Source"):
     st.write("""
-    The data displayed in this dashboard is sourced from the ELHUB API, 
-    containing hourly electricity production per price area and production group. 
-    Data has been loaded into MongoDB and visualized interactively here.
+    The data in this dashboard comes from the ELHUB API, showing hourly electricity
+    production by price area and production group. It’s stored in MongoDB and visualized here interactively.
     """)
