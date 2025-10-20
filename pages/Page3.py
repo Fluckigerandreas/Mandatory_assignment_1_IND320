@@ -31,11 +31,8 @@ with col1:
     st.subheader("Select Price Areas:")
 
     selected_areas = []
-
-    # Multiple radio buttons simulation
     for area in df["pricearea"].unique():
-        choice = st.radio(f"{area}:", ["Exclude", "Include"], index=0, key=f"radio_{area}")
-        if choice == "Include":
+        if st.checkbox(area, value=True, key=f"chk_{area}"):
             selected_areas.append(area)
 
     if not selected_areas:
