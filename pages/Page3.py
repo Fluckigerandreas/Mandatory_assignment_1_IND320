@@ -21,12 +21,20 @@ if not data:
 df = pd.DataFrame(data)
 df["starttime"] = pd.to_datetime(df["starttime"])
 
-# --- Assign specific colors per production group ---
-prod_groups_unique = df["productiongroup"].unique()
+# --- Define custom colors per production group ---
+# Make sure these match the actual names in your data
 group_colors = {
-    prod_groups_unique[i]: px.colors.qualitative.Set2[i % len(px.colors.qualitative.Set2)]
-    for i in range(len(prod_groups_unique))
+    "hydro": "blue",
+    "wind": "orange",
+    "solar": "yellow",
+    "thermal": "green",
+    "other": "black"
 }
+
+# If your dataset has additional groups, assign default colors
+for group in df["productiongroup"].unique():
+    if group not in group_colors:
+        group_colors[group] = px.colors.qualitative.Pastel1[len(group_colors) % len(px.colors.qualitative.Pastel1)]
 
 # --- Streamlit layout ---
 st.title("Energy Production Dashboard")
@@ -57,7 +65,7 @@ with col1:
     df_area = df[df["pricearea"].isin(selected_areas)]
     total_by_group = df_area.groupby(["productiongroup"])["quantitykwh"].sum().reset_index()
 
-    # Pie chart with fixed colors per production group
+    # Pie chart with custom colors
     fig_pie = px.pie(
         total_by_group,
         names="productiongroup",
