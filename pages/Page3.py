@@ -31,9 +31,18 @@ with col1:
     st.subheader("Select Price Areas:")
 
     selected_areas = []
-    for area in df["pricearea"].unique():
-        if st.checkbox(area, value=True, key=f"chk_{area}"):
-            selected_areas.append(area)
+
+    # Arrange checkboxes in horizontal layout
+    price_areas = df["pricearea"].unique()
+    n_cols = min(4, len(price_areas))  # up to 4 checkboxes per row
+    rows = (len(price_areas) + n_cols - 1) // n_cols
+
+    for r in range(rows):
+        cols = st.columns(n_cols)
+        for c, area_idx in enumerate(range(r * n_cols, min((r + 1) * n_cols, len(price_areas)))):
+            area = price_areas[area_idx]
+            if cols[c].checkbox(area, value=True, key=f"chk_{area}"):
+                selected_areas.append(area)
 
     if not selected_areas:
         st.warning("Please select at least one price area.")
@@ -43,13 +52,15 @@ with col1:
     df_area = df[df["pricearea"].isin(selected_areas)]
     total_by_group = df_area.groupby(["pricearea", "productiongroup"])["quantitykwh"].sum().reset_index()
 
-    # Pie chart
+    # Pie chart with larger size
     fig_pie = px.pie(
         total_by_group,
         names="productiongroup",
         values="quantitykwh",
         color="pricearea" if len(selected_areas) > 1 else None,
-        title=f"Total Production in Selected Price Area(s)"
+        title=f"Total Production in Selected Price Area(s)",
+        width=600,
+        height=600
     )
     fig_pie.update_traces(textposition="inside", textinfo="percent+label")
     st.plotly_chart(fig_pie, use_container_width=True)
@@ -87,7 +98,9 @@ with col2:
             y="quantitykwh",
             color="productiongroup",
             markers=True,
-            title=f"Hourly Production ({pd.to_datetime(f'2021-{month}-01').strftime('%B')})"
+            title=f"Hourly Production ({pd.to_datetime(f'2021-{month}-01').strftime('%B')})",
+            width=700,
+            height=500
         )
         st.plotly_chart(fig_line, use_container_width=True)
 
