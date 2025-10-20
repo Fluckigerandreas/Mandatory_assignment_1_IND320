@@ -34,19 +34,41 @@ col1, col2 = st.columns(2)
 # --- Left column: Price area selection + pie chart ---
 with col1:
     st.header("Total Production Pie Chart")
-    price_area = st.radio("Select a price area:", df["pricearea"].unique())
-    
-    df_area = df[df["pricearea"] == price_area]
-    total_by_group = df_area.groupby("productiongroup")["quantitykwh"].sum().reset_index()
 
+    st.subheader("Select Price Areas:")
+    selected_areas = []
+
+    # Create a radio-like toggle for each price area
+    for area in df["pricearea"].unique():
+        if st.checkbox(f"{area}", value=False):
+            selected_areas.append(area)
+
+    # If nothing selected, show message
+    if not selected_areas:
+        st.warning("Please select at least one price area.")
+        st.stop()
+
+    # Filter data by selected areas
+    df_area = df[df["pricearea"].isin(selected_areas)]
+
+    # Aggregate total production
+    total_by_group = (
+        df_area.groupby(["pricearea", "productiongroup"])["quantitykwh"]
+        .sum()
+        .reset_index()
+    )
+
+    # Plot pie chart
     fig_pie = px.pie(
         total_by_group,
         names="productiongroup",
         values="quantitykwh",
-        title=f"Total Production in {price_area} (Year)"
+        color="pricearea" if len(selected_areas) > 1 else None,
+        title=f"Total Production in Selected Price Area(s)"
     )
-    fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+    fig_pie.update_traces(textposition="inside", textinfo="percent+label")
     st.plotly_chart(fig_pie, use_container_width=True)
+
 
 # --- Right column: Production group(s) + month + line chart ---
 with col2:
