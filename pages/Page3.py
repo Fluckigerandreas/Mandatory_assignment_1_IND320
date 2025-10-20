@@ -21,6 +21,13 @@ if not data:
 df = pd.DataFrame(data)
 df["starttime"] = pd.to_datetime(df["starttime"])
 
+# --- Assign specific colors per production group ---
+prod_groups_unique = df["productiongroup"].unique()
+group_colors = {
+    prod_groups_unique[i]: px.colors.qualitative.Set2[i % len(px.colors.qualitative.Set2)]
+    for i in range(len(prod_groups_unique))
+}
+
 # --- Streamlit layout ---
 st.title("Energy Production Dashboard")
 col1, col2 = st.columns(2)
@@ -32,11 +39,10 @@ with col1:
 
     selected_areas = []
 
-    # Arrange checkboxes in horizontal layout
+    # Arrange checkboxes horizontally
     price_areas = df["pricearea"].unique()
-    n_cols = min(4, len(price_areas))  # up to 4 checkboxes per row
+    n_cols = min(4, len(price_areas))
     rows = (len(price_areas) + n_cols - 1) // n_cols
-
     for r in range(rows):
         cols = st.columns(n_cols)
         for c, area_idx in enumerate(range(r * n_cols, min((r + 1) * n_cols, len(price_areas)))):
@@ -48,16 +54,16 @@ with col1:
         st.warning("Please select at least one price area.")
         st.stop()
 
-    # Filter and aggregate
     df_area = df[df["pricearea"].isin(selected_areas)]
-    total_by_group = df_area.groupby(["pricearea", "productiongroup"])["quantitykwh"].sum().reset_index()
+    total_by_group = df_area.groupby(["productiongroup"])["quantitykwh"].sum().reset_index()
 
-    # Pie chart with larger size
+    # Pie chart with fixed colors per production group
     fig_pie = px.pie(
         total_by_group,
         names="productiongroup",
         values="quantitykwh",
-        color="pricearea" if len(selected_areas) > 1 else None,
+        color="productiongroup",
+        color_discrete_map=group_colors,
         title=f"Total Production in Selected Price Area(s)",
         width=600,
         height=600
@@ -70,7 +76,7 @@ with col2:
     st.header("Monthly Production Line Plot")
     
     # Multi-select for production groups
-    prod_groups = st.multiselect(
+    prod_groups_selected = st.multiselect(
         "Select production group(s):",
         df["productiongroup"].unique(),
         default=df["productiongroup"].unique()
@@ -85,7 +91,7 @@ with col2:
     
     # Filter data
     df_filtered = df_area[
-        (df_area["productiongroup"].isin(prod_groups)) &
+        (df_area["productiongroup"].isin(prod_groups_selected)) &
         (df_area["starttime"].dt.month == month)
     ]
     
@@ -98,6 +104,7 @@ with col2:
             y="quantitykwh",
             color="productiongroup",
             markers=True,
+            color_discrete_map=group_colors,
             title=f"Hourly Production ({pd.to_datetime(f'2021-{month}-01').strftime('%B')})",
             width=700,
             height=500
