@@ -1,7 +1,5 @@
 import streamlit as st
+from pathlib import Path
 
-st.image(
-    "/workspaces/blank-app/a9my9i.jpg", 
-    caption="",
-    use_container_width=True
-)
+image_path = Path(__file__).parent / "a9my9i.jpg"
+st.image(str(image_path), caption="", use_container_width=True)
