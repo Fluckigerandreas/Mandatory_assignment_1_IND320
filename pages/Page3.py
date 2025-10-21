@@ -139,9 +139,7 @@ with col2:
         # --- SUM UP across price areas ---
         df_sum = (
             df_filtered
-            .groupby(["starttime", "productiongroup"], as_index=False)["quantitykwh"]
-            .sum()
-            .sort_values("starttime")
+            .groupby(["starttime", "productiongroup"], as_index=False)["quantitykwh"].sum().sort_values("starttime")
         )
 
         # --- Create the line chart ---
