@@ -4,30 +4,45 @@ from pymongo import MongoClient
 import certifi
 import plotly.express as px
 
-# --- MongoDB connection ---
-uri = st.secrets["mongo"]["uri"]
-ca = certifi.where()
-client = MongoClient(uri, tls=True, tlsCAFile=ca)
+# -------------------------------
+# CACHE DATA LOADING
+# -------------------------------
+@st.cache_data(show_spinner="Loading data from MongoDB...")
+def load_data():
+    """Load data from MongoDB with caching."""
+    uri = st.secrets["mongo"]["uri"]
+    ca = certifi.where()
+    client = MongoClient(uri, tls=True, tlsCAFile=ca)
+    db = client['example']
+    collection = db['data']
 
-db = client['example']
-collection = db['data']
+    data = list(collection.find())
+    if not data:
+        return pd.DataFrame()  # Empty DataFrame fallback
 
-# --- Load data ---
-data = list(collection.find())
-if not data:
+    df = pd.DataFrame(data)
+    df["starttime"] = pd.to_datetime(df["starttime"])
+
+    # Remove duplicates (fix NO1 duplicate issue)
+    df = df.drop_duplicates(subset=["pricearea", "productiongroup", "starttime"], keep="first").reset_index(drop=True)
+    return df
+
+
+# -------------------------------
+# LOAD DATA
+# -------------------------------
+df = load_data()
+
+if df.empty:
     st.error("No data found in MongoDB.")
     st.stop()
 
-df = pd.DataFrame(data)
-df["starttime"] = pd.to_datetime(df["starttime"])
+st.caption(f"✅ Loaded {len(df)} unique records after removing duplicates (cached).")
 
-# --- Remove duplicates (fix NO1 duplicate issue) ---
-df = df.drop_duplicates(subset=["pricearea", "productiongroup", "starttime"], keep="first").reset_index(drop=True)
 
-# Optional: feedback to confirm cleaning
-st.caption(f"✅ Loaded {len(df)} unique records after removing duplicates.")
-
-# --- Define custom colors per production group ---
+# -------------------------------
+# DEFINE COLORS
+# -------------------------------
 group_colors = {
     "hydro": "blue",
     "wind": "lightblue",
@@ -43,7 +58,10 @@ for group in df["productiongroup"].unique():
             len(group_colors) % len(px.colors.qualitative.Pastel1)
         ]
 
-# --- Streamlit layout ---
+
+# -------------------------------
+# STREAMLIT LAYOUT
+# -------------------------------
 st.title("⚡ Energy Production Dashboard")
 col1, col2 = st.columns(2)
 
@@ -88,6 +106,7 @@ with col1:
     fig_pie.update_traces(textposition="inside", textinfo="percent+label")
     st.plotly_chart(fig_pie, use_container_width=True)
 
+
 # -------------------------------
 # RIGHT COLUMN: Line Chart by Month and Group
 # -------------------------------
@@ -108,30 +127,38 @@ with col2:
         format_func=lambda x: pd.to_datetime(f"2021-{x}-01").strftime("%B")
     )
 
-    # Filter data
+    # Filter and aggregate data
     df_filtered = df_area[
         (df_area["productiongroup"].isin(prod_groups_selected)) &
         (df_area["starttime"].dt.month == month)
-    ].sort_values("starttime")
+    ]
 
     if df_filtered.empty:
         st.warning("No data for this selection.")
     else:
+        # --- SUM UP across price areas ---
+        df_sum = (
+            df_filtered
+            .groupby(["starttime", "productiongroup"], as_index=False)["quantitykwh"]
+            .sum()
+            .sort_values("starttime")
+        )
+
+        # --- Create the line chart ---
         fig_line = px.line(
-            df_filtered,
+            df_sum,
             x="starttime",
             y="quantitykwh",
             color="productiongroup",
             markers=True,
             color_discrete_map=group_colors,
-            title=f"Hourly Production ({pd.to_datetime(f'2021-{month}-01').strftime('%B')})",
+            title=f"Total Hourly Production ({pd.to_datetime(f'2021-{month}-01').strftime('%B')})",
             width=900,
             height=500
         )
-
-        # Make sure no line jumps between discontinuous points
         fig_line.update_traces(connectgaps=False)
         st.plotly_chart(fig_line, use_container_width=True)
+
 
 # -------------------------------
 # Data Source Info
