@@ -111,7 +111,7 @@ with col1:
 # RIGHT COLUMN: Line Chart by Month and Group
 # -------------------------------
 with col2:
-    st.header("Monthly Production Line Plot (summed for multiple price areas, to make it easier to view)")
+    st.header("Monthly Production Line Plot")
 
     # Production group selection (pills style)
     prod_groups_selected = st.multiselect(
