@@ -165,4 +165,5 @@ with st.expander("ℹ️ Data Source"):
     st.write("""
     The data in this dashboard comes from the ELHUB API, showing hourly electricity
     production by price area and production group. It’s stored in MongoDB and visualized here interactively.
+    Update
     """)
