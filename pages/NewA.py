@@ -1,4 +1,6 @@
-# NewA.py
+# ======================================================
+# NewA.py — Streamlit page
+# ======================================================
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -8,12 +10,12 @@ from scipy import signal
 from pymongo.mongo_client import MongoClient
 import certifi
 
-st.set_page_config(page_title="Production Analysis: STL & Spectrogram", layout="wide")
-
-# -------------------------------
+# ======================================================
+# 1) Load data from MongoDB (cached)
+# ======================================================
 @st.cache_data(show_spinner="Loading data from MongoDB...")
 def load_data():
-    """Load data from MongoDB with caching."""
+    """Load data from MongoDB with caching, aggregate duplicates, produce time series."""
     uri = st.secrets["mongo"]["uri"]
     ca = certifi.where()
     client = MongoClient(uri, tls=True, tlsCAFile=ca)
@@ -27,18 +29,22 @@ def load_data():
     df = pd.DataFrame(data)
     df["starttime"] = pd.to_datetime(df["starttime"])
 
-    # Remove duplicates (keep first)
-    df = df.drop_duplicates(subset=["pricearea", "productiongroup", "starttime"], keep="first").reset_index(drop=True)
+    # Aggregate duplicates by summing quantities
+    df = df.groupby(["pricearea", "productiongroup", "starttime"], as_index=False).agg({"quantitykwh": "sum"})
+
+    # Set datetime index for time series
+    df.set_index("starttime", inplace=True)
 
     return df
 
-# -------------------------------
+# ======================================================
+# 2) STL decomposition
+# ======================================================
 def stl_decompose_series(series, period=24*7, title="STL Decomposition"):
-    """Perform STL decomposition and plot."""
+    """Perform STL decomposition on a time series."""
     series = series.sort_index()
-    series = series[~series.index.duplicated(keep='first')]  # remove duplicate timestamps
 
-    # Handle timezone & DST
+    # Handle timezone
     if series.index.tz is not None:
         series = series.tz_convert("UTC")
     else:
@@ -48,6 +54,7 @@ def stl_decompose_series(series, period=24*7, title="STL Decomposition"):
     series = series.asfreq("h")
     series = series.interpolate(method="time")
 
+    # STL
     stl = STL(series, period=period, robust=True)
     result = stl.fit()
 
@@ -60,18 +67,16 @@ def stl_decompose_series(series, period=24*7, title="STL Decomposition"):
 
     return result
 
-# -------------------------------
+# ======================================================
+# 3) Spectrogram
+# ======================================================
 def plot_spectrogram(series, fs=1.0, nperseg=24*7, noverlap=None):
-    """Plot the spectrogram of a series."""
-    series = series[~series.index.duplicated(keep='first')]  # remove duplicate timestamps
+    """Plot the spectrogram of a time series."""
     s = series.dropna().astype(float)
     noverlap = noverlap or nperseg // 2
+    f, t, Sxx = signal.spectrogram(s.values, fs=fs, window="hann", nperseg=nperseg, noverlap=noverlap)
 
-    f, t, Sxx = signal.spectrogram(
-        s.values, fs=fs, window="hann", nperseg=nperseg, noverlap=noverlap
-    )
-
-    fig, ax = plt.subplots(figsize=(14, 5))
+    fig, ax = plt.subplots(figsize=(10, 5))
     pcm = ax.pcolormesh(t, f, 10 * np.log10(Sxx + 1e-12), shading="gouraud")
     ax.set_title("Spectrogram (dB scale)")
     ax.set_xlabel("Window index")
@@ -82,41 +87,38 @@ def plot_spectrogram(series, fs=1.0, nperseg=24*7, noverlap=None):
 
     return f, t, Sxx
 
-# -------------------------------
-# Main Streamlit App
-# -------------------------------
-st.title("Production Analysis: STL & Spectrogram")
+# ======================================================
+# 4) Streamlit UI
+# ======================================================
+st.title("NewA Analysis: STL & Spectrogram")
 
 # Load data
 df = load_data()
 if df.empty:
-    st.warning("No production data found in MongoDB.")
+    st.warning("No data found in MongoDB.")
     st.stop()
 
-# Price area selector
-price_areas = df["pricearea"].unique()
-selected_area = st.selectbox("Select price area:", price_areas)
+# Select price area & production group
+priceareas = df["pricearea"].unique()
+prod_groups = df["productiongroup"].unique()
+
+selected_area = st.selectbox("Select price area", priceareas)
+selected_group = st.selectbox("Select production group", prod_groups)
 
 # Filter data
-df_area = df[df["pricearea"] == selected_area].copy()
+df_area = df[(df["pricearea"] == selected_area) & (df["productiongroup"] == selected_group)]
+series = df_area["quantitykwh"]
 
-# Determine series column
-if "quantitykwh" in df_area.columns:
-    series = df_area.set_index("starttime")["quantitykwh"]
-else:
-    st.error("No 'quantitykwh' column found in the data.")
-    st.stop()
-
-# Tabs
+# Tabs for analysis
 tab1, tab2 = st.tabs(["STL Decomposition", "Spectrogram"])
 
 with tab1:
     st.header("STL Decomposition")
-    period = st.number_input("Seasonal period (hours):", min_value=1, value=24*7)
+    period = st.number_input("STL period (hours)", min_value=1, value=24*7)
     stl_res = stl_decompose_series(series, period=period)
 
 with tab2:
     st.header("Spectrogram")
-    fs = st.number_input("Sampling frequency (1/hour default):", min_value=0.1, value=1.0)
-    nperseg = st.number_input("Window length (hours):", min_value=1, value=24*7)
-    plot_spectrogram(series, fs=fs, nperseg=nperseg)
+    nperseg = st.number_input("Window size (nperseg)", min_value=1, value=24*7)
+    plot_spectrogram(series, nperseg=nperseg)
+
