@@ -1,27 +1,37 @@
-# app.py (Front Page)
 import streamlit as st
 
-# Page configuration
-st.set_page_config(
-    page_title="Weather & Energy Insights Dashboard",
-    page_icon="🌤️"
-)
-
+st.title("⚡ Energy & Weather Dashboard")
 st.markdown("""
-# 🌤️ Weather & Energy Insights Dashboard
+Welcome! This dashboard provides interactive analysis of energy production and weather data.  
+Navigate through the pages using the sidebar:
 
-Welcome! This interactive Streamlit app lets you explore **weather data** and **energy production data** through three pages:
+1. **Energy Production Overview**  
+   Explore hourly electricity production by price area and production group.  
+   - Pie chart: Total production per price area.  
+   - Line chart: Hourly production trends by group and month.  
 
-1. **First Month Overview** 📈  
-   View imported weather data and explore trends for the first month of the year. Interactive line charts show hourly patterns for each variable.
+2. **STL & Spectrogram Analysis (NewA)**  
+   Analyze time series patterns in energy production:  
+   - **STL Decomposition**: Trend, seasonal, and residual components.  
+   - **Spectrogram**: Frequency content over time.  
 
-2. **Weather Data Visualization** 📊  
-   Visualize weather variables over any month range. Select individual variables or view all at once, with clear, interactive Altair line charts.
+3. **ERA5 Weather: First Month Overview**  
+   Inspect the first month (January) of historical weather data for selected cities:  
+   - Hourly temperature, precipitation, and wind.  
+   - Interactive line charts per variable.  
 
-3. **Energy Production Dashboard** ⚡  
-   Analyze electricity production by price area and production group. Select price areas, production groups, and months to explore both pie charts (annual totals) and line plots (monthly hourly data). Data is loaded from **MongoDB** and visualized dynamically.
+4. **Weather Data Visualization (Page3)**  
+   Flexible plotting of ERA5 weather data:  
+   - Select variables and months.  
+   - Plot multiple variables or a single variable over time.  
 
-Use the sidebar and interactive controls on each page to filter and customize your visualizations.
+5. **Outlier & Anomaly Analysis (NewB)**  
+   Detect unusual weather events for selected cities and years:  
+   - **Temperature**: Outliers via DCT + SPC.  
+   - **Precipitation**: Anomalies via Local Outlier Factor (LOF).  
+
+6. **Optional Page**  
+   Additional analyses or experiments can be added here.
 """)
 
 # Added a nice picture (Chose a nice nightsky)
