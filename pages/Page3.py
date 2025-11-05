@@ -1,4 +1,3 @@
-# 3_Weather_Plot.py
 # Page3.py
 import streamlit as st
 import pandas as pd
@@ -43,21 +42,23 @@ def load_data_api(lat, lon, year=2021, timezone="Europe/Oslo"):
     df["month"] = df["time"].dt.to_period("M")  # helper column
     return df
 
-# --- Sidebar controls ---
-st.sidebar.header("Controls")
+# --- Page controls ---
+st.header("Controls")
 
 # City selection
-city_option = st.sidebar.selectbox("Select city:", [c["city"] for c in cities])
+city_option = st.selectbox("Select city:", [c["city"] for c in cities])
 selected_city = next(c for c in cities if c["city"] == city_option)
 
+# Load data for column and month options
+df_sample = load_data_api(selected_city["lat"], selected_city["lon"])
+
 # Variable selection
-df_sample = load_data_api(selected_city["lat"], selected_city["lon"])  # load for column list
 columns = ["All"] + list(df_sample.columns[1:-1])  # skip 'time' and 'month'
-selected_column = st.sidebar.selectbox("Select variable:", columns)
+selected_column = st.selectbox("Select variable:", columns)
 
 # Month range slider
 unique_months = df_sample['month'].unique().astype(str).tolist()
-month_range = st.sidebar.select_slider(
+month_range = st.select_slider(
     "Select months:",
     options=unique_months,
     value=(unique_months[0], unique_months[-1])
