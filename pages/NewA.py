@@ -98,16 +98,23 @@ if df.empty:
     st.warning("No data found in MongoDB.")
     st.stop()
 
-# Select price area & production group
-priceareas = df["pricearea"].unique()
-prod_groups = df["productiongroup"].unique()
+# Checkbox: Use all data or filter
+use_all = st.checkbox("Use all data (aggregate over price area and production group)", value=False)
 
-selected_area = st.selectbox("Select price area", priceareas)
-selected_group = st.selectbox("Select production group", prod_groups)
+if use_all:
+    # Aggregate all data
+    series = df.groupby(df.index)["quantitykwh"].sum()
+else:
+    # Select price area & production group
+    priceareas = df["pricearea"].unique()
+    prod_groups = df["productiongroup"].unique()
 
-# Filter data
-df_area = df[(df["pricearea"] == selected_area) & (df["productiongroup"] == selected_group)]
-series = df_area["quantitykwh"]
+    selected_area = st.selectbox("Select price area", priceareas)
+    selected_group = st.selectbox("Select production group", prod_groups)
+
+    # Filter data
+    df_area = df[(df["pricearea"] == selected_area) & (df["productiongroup"] == selected_group)]
+    series = df_area["quantitykwh"]
 
 # Tabs for analysis
 tab1, tab2 = st.tabs(["STL Decomposition", "Spectrogram"])
@@ -121,4 +128,3 @@ with tab2:
     st.header("Spectrogram")
     nperseg = st.number_input("Window size (nperseg)", min_value=1, value=24*7)
     plot_spectrogram(series, nperseg=nperseg)
-
