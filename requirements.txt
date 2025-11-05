@@ -5,3 +5,5 @@ plotly
 pymongo
 certifi
 requests-cache
+openmeteo-requests
+retry-requests
