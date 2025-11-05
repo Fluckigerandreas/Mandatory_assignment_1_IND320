@@ -7,3 +7,6 @@ certifi
 requests-cache
 openmeteo-requests
 retry-requests
+matplotlib.pyplot
+statsmodels
+scipy
