@@ -1,6 +1,3 @@
-# ======================================================
-#   new_A.py - STL & Spectrogram for Elhub Production
-# ======================================================
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -8,42 +5,29 @@ import matplotlib.pyplot as plt
 from statsmodels.tsa.seasonal import STL
 from scipy import signal
 from pymongo.mongo_client import MongoClient
-from pymongo.server_api import ServerApi
 import certifi
 
-from mysecrets import USERNAME, PASSWORD  # MongoDB credentials
-
 # ======================================================
-#   MONGODB CONNECTION
+#   CACHED DATA LOADING FROM MONGODB
 # ======================================================
-def connect_mongo():
+@st.cache_data(show_spinner="Loading data from MongoDB...")
+def load_data():
+    """Load data from MongoDB with caching."""
+    uri = st.secrets["mongo"]["uri"]
     ca = certifi.where()
-    uri = (
-        f"mongodb+srv://{USERNAME}:{PASSWORD}"
-        "@cluster0.chffuae.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-    )
-    client = MongoClient(uri, server_api=ServerApi("1"), tls=True, tlsCAFile=ca)
-    client.admin.command("ping")
-    st.success("✅ Connected to MongoDB")
-    return client
+    client = MongoClient(uri, tls=True, tlsCAFile=ca)
+    db = client['example']
+    collection = db['data']
 
-# ======================================================
-#   LOAD ELHUB PRODUCTION DATA
-# ======================================================
-def load_all_elhub_production(client, db_name="example", collection_name="data"):
-    db = client[db_name]
-    coll = db[collection_name]
-    df = pd.DataFrame(list(coll.find()))
-    if df.empty:
-        raise ValueError(f"No documents found in {db_name}.{collection_name}")
-    datetime_col = next((c for c in df.columns if "start" in c.lower()), None)
-    quantity_col = next((c for c in df.columns if "quantity" in c.lower()), None)
-    if not datetime_col or not quantity_col:
-        raise ValueError("Missing datetime or quantity column")
-    df[datetime_col] = pd.to_datetime(df[datetime_col])
-    df.set_index(datetime_col, inplace=True)
-    df = df.groupby(df.index).agg({quantity_col: "sum"})
-    df.rename(columns={quantity_col: "production"}, inplace=True)
+    data = list(collection.find())
+    if not data:
+        return pd.DataFrame()  # Empty DataFrame fallback
+
+    df = pd.DataFrame(data)
+    df["starttime"] = pd.to_datetime(df["starttime"])
+
+    # Remove duplicates (fix NO1 duplicate issue)
+    df = df.drop_duplicates(subset=["pricearea", "productiongroup", "starttime"], keep="first").reset_index(drop=True)
     return df
 
 # ======================================================
@@ -88,22 +72,30 @@ def plot_spectrogram(series, fs=1.0, nperseg=24*7, noverlap=None):
 # ======================================================
 st.title("STL & Spectrogram Analysis - Elhub Production")
 
-# Connect and load data
-client = connect_mongo()
-full_elhub_df = load_all_elhub_production(client)
+# Load data (cached)
+df = load_data()
+if df.empty:
+    st.warning("No data found in MongoDB.")
+else:
+    # Select pricearea if needed
+    price_areas = df["pricearea"].unique().tolist()
+    selected_area = st.selectbox("Select Price Area", price_areas)
+    df_area = df[df["pricearea"] == selected_area].copy()
+    df_area.set_index("starttime", inplace=True)
+    series = df_area["quantity"]  # or "production" column depending on your DB
 
-# Tabs
-tabs = st.tabs(["STL Decomposition", "Spectrogram"])
+    # Tabs
+    tabs = st.tabs(["STL Decomposition", "Spectrogram"])
 
-# --- STL Decomposition Tab ---
-with tabs[0]:
-    st.header("STL Decomposition of Elhub Production")
-    period = st.number_input("STL Period (hours)", value=24*7)
-    stl_res = stl_decompose_series(full_elhub_df["production"], period=period)
+    # --- STL Tab ---
+    with tabs[0]:
+        st.header(f"STL Decomposition - {selected_area}")
+        period = st.number_input("STL Period (hours)", value=24*7)
+        stl_res = stl_decompose_series(series, period=period)
 
-# --- Spectrogram Tab ---
-with tabs[1]:
-    st.header("Spectrogram of Elhub Production")
-    nperseg = st.number_input("Window size (hours)", value=24*7)
-    noverlap = st.number_input("Overlap (hours)", value=nperseg//2)
-    f, t, Sxx = plot_spectrogram(full_elhub_df["production"], nperseg=nperseg, noverlap=noverlap)
+    # --- Spectrogram Tab ---
+    with tabs[1]:
+        st.header(f"Spectrogram - {selected_area}")
+        nperseg = st.number_input("Window size (hours)", value=24*7)
+        noverlap = st.number_input("Overlap (hours)", value=nperseg//2)
+        f, t, Sxx = plot_spectrogram(series, nperseg=nperseg, noverlap=noverlap)
