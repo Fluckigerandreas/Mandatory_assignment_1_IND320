@@ -1,5 +1,5 @@
 # 3_Weather_Plot.py
-# 3_Weather_Plot.py
+# Page3.py
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -26,7 +26,13 @@ def load_data_api(lat, lon, year=2021, timezone="Europe/Oslo"):
         "longitude": lon,
         "start_date": f"{year}-01-01",
         "end_date": f"{year}-12-31",
-        "hourly": ["temperature_2m","precipitation","wind_speed_10m","wind_gusts_10m","wind_direction_10m"],
+        "hourly": [
+            "temperature_2m",
+            "precipitation",
+            "wind_speed_10m",
+            "wind_gusts_10m",
+            "wind_direction_10m"
+        ],
         "models": "era5",
         "timezone": timezone
     }
@@ -39,24 +45,27 @@ def load_data_api(lat, lon, year=2021, timezone="Europe/Oslo"):
 
 # --- Sidebar controls ---
 st.sidebar.header("Controls")
+
+# City selection
 city_option = st.sidebar.selectbox("Select city:", [c["city"] for c in cities])
 selected_city = next(c for c in cities if c["city"] == city_option)
 
-# --- Load data from API ---
-df = load_data_api(selected_city["lat"], selected_city["lon"])
-
-# --- Variable selection ---
-columns = ["All"] + list(df.columns[1:-1])  # skip 'time' and 'month'
+# Variable selection
+df_sample = load_data_api(selected_city["lat"], selected_city["lon"])  # load for column list
+columns = ["All"] + list(df_sample.columns[1:-1])  # skip 'time' and 'month'
 selected_column = st.sidebar.selectbox("Select variable:", columns)
 
-# --- Month range slider ---
-unique_months = df['month'].unique().astype(str).tolist()
+# Month range slider
+unique_months = df_sample['month'].unique().astype(str).tolist()
 month_range = st.sidebar.select_slider(
     "Select months:",
     options=unique_months,
-    value=(unique_months[0], unique_months[0])
+    value=(unique_months[0], unique_months[-1])
 )
 start, end = pd.Period(month_range[0]), pd.Period(month_range[1])
+
+# --- Load filtered data ---
+df = load_data_api(selected_city["lat"], selected_city["lon"])
 filtered_df = df[(df['month'] >= start) & (df['month'] <= end)]
 
 # --- Plotting ---
@@ -92,5 +101,4 @@ else:
         .properties(width=800, height=400, title=f"{selected_column} over Time")
     )
 
-# --- Render chart ---
-st.altair_chart(chart)  # just pass the chart, no width argument
+st.altair_chart(chart)
