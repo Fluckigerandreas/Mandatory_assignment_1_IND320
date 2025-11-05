@@ -4,3 +4,4 @@ altair
 plotly
 pymongo
 certifi
+requests-cache
