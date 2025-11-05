@@ -92,4 +92,5 @@ else:
         .properties(width=800, height=400, title=f"{selected_column} over Time")
     )
 
-st.altair_chart(chart, width='stretch')  # updated per Streamlit deprecation
+# --- Render chart ---
+st.altair_chart(chart)  # just pass the chart, no width argument
