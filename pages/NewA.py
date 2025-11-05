@@ -82,7 +82,7 @@ else:
     selected_area = st.selectbox("Select Price Area", price_areas)
     df_area = df[df["pricearea"] == selected_area].copy()
     df_area.set_index("starttime", inplace=True)
-    series = df_area["quantity"]  # or "production" column depending on your DB
+    series = df_area["production"]
 
     # Tabs
     tabs = st.tabs(["STL Decomposition", "Spectrogram"])
