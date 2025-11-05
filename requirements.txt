@@ -10,3 +10,4 @@ retry-requests
 matplotlib
 statsmodels
 scipy
+scikit-learn
