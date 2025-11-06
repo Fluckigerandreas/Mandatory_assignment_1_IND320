@@ -79,10 +79,6 @@ def download_era5_openmeteo(lat, lon, year, timezone="Europe/Oslo"):
 # ======================================================
 def detect_temperature_outliers_filter(df, temp_col="temperature_2m", cutoff_hours=400,
                                        sample_rate_hours=1, n_std=2.0):
-    """
-    Detect temperature outliers using a highpass-lowpass Butterworth filter + SPC
-    with trend-following boundaries.
-    """
     s = df[temp_col].dropna().sort_index()
     x = s.values.astype(float)
 
