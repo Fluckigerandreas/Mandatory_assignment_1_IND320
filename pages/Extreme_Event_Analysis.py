@@ -157,8 +157,8 @@ tab1, tab2 = st.tabs(["Temperature Outliers (SPC)", "Precipitation Anomalies (LO
 
 with tab1:
     st.header("Temperature Outliers (DCT + SPC)")
-    n_std = st.number_input("Number of standard deviations", min_value=0.1, value=3.5, step=0.1)
-    cutoff_hours = st.number_input("Cutoff hours for DCT smoothing", min_value=1, value=24*30*6, step=1)
+    n_std = st.number_input("Number of standard deviations", min_value=0.1, value=2.0, step=0.1)
+    cutoff_hours = st.number_input("Cutoff hours for DCT smoothing", min_value=1, value=400, step=1)
     temp_outliers = detect_temperature_outliers_filter(weather_df, cutoff_hours=cutoff_hours, n_std=n_std)
     st.write(f"Total outliers detected: {len(temp_outliers)}")
     st.dataframe(temp_outliers.head(20))
