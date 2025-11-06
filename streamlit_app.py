@@ -5,33 +5,30 @@ st.markdown("""
 Welcome! This dashboard provides interactive analysis of energy production and weather data.  
 Navigate through the pages using the sidebar:
 
-1. **Energy Production Overview**  
+1. **Analysis of Elhub data**  
    Explore hourly electricity production by price area and production group.  
    - Pie chart: Total production per price area.  
    - Line chart: Hourly production trends by group and month.  
 
-2. **STL & Spectrogram Analysis (NewA)**  
+2. **Beautiful STL and spectrogram**  
    Analyze time series patterns in energy production:  
    - **STL Decomposition**: Trend, seasonal, and residual components.  
    - **Spectrogram**: Frequency content over time.  
 
-3. **ERA5 Weather: First Month Overview**  
+3. **Columnwise data import**  
    Inspect the first month (January) of historical weather data for selected cities:  
    - Hourly temperature, precipitation, and wind.  
    - Interactive line charts per variable.  
 
-4. **Weather Data Visualization (Page3)**  
+4. **Data Visualization Dashbord**  
    Flexible plotting of ERA5 weather data:  
    - Select variables and months.  
    - Plot multiple variables or a single variable over time.  
 
-5. **Outlier & Anomaly Analysis (NewB)**  
+5. **Extreme Event Analysis**  
    Detect unusual weather events for selected cities and years:  
    - **Temperature**: Outliers via DCT + SPC.  
    - **Precipitation**: Anomalies via Local Outlier Factor (LOF).  
-
-6. **Optional Page**  
-   Additional analyses or experiments can be added here.
 """)
 
 # Added a nice picture (Chose a nice nightsky)
