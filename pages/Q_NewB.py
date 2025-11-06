@@ -11,6 +11,7 @@ from scipy import signal
 import requests_cache
 from retry_requests import retry
 import openmeteo_requests
+from scipy.signal import butter, filtfilt
 
 # ======================================================
 # PRICE AREAS (CITIES)
@@ -74,36 +75,48 @@ def download_era5_openmeteo(lat, lon, year, timezone="Europe/Oslo"):
     return df
 
 # ======================================================
-# DCT + SPC TEMPERATURE OUTLIERS
+# TEMPERATURE OUTLIERS (Highpass–Lowpass Filter + Trend SPC)
 # ======================================================
-def detect_temperature_outliers_dct(df, temp_col="temperature_2m", cutoff_hours=24*30*6, n_std=3.5):
+def detect_temperature_outliers_filter(df, temp_col="temperature_2m", cutoff_hours=24*30*6,
+                                       sample_rate_hours=1, n_std=3.5):
+    """
+    Detect temperature outliers using a highpass-lowpass Butterworth filter + SPC
+    with trend-following boundaries.
+    """
     s = df[temp_col].dropna().sort_index()
     x = s.values.astype(float)
-    n = len(x)
 
-    # DCT smoothing
-    K = max(1, int(n / max(1, cutoff_hours)))
-    X = dct(x, norm="ortho")
-    low = np.zeros_like(X)
-    low[:K] = X[:K]
-    low_rec = idct(low, norm="ortho")
+    # --- Define cutoff frequency (normalized) ---
+    nyquist = 0.5 / sample_rate_hours
+    cutoff_freq = 1 / cutoff_hours  # convert period (hours) → frequency (1/hour)
+    normal_cutoff = cutoff_freq / nyquist
 
-    # SPC-based limits
-    satv = x - low_rec
-    sigma_hat = 1.4826 * np.median(np.abs(satv - np.median(satv)))
-    med_temp = np.median(x)
-    lower, upper = med_temp - n_std * sigma_hat, med_temp + n_std * sigma_hat
-    mask = (x < lower) | (x > upper)
+    # --- Low-pass Butterworth filter to estimate the trend ---
+    b, a = butter(N=4, Wn=normal_cutoff, btype="low", analog=False)
+    trend = filtfilt(b, a, x)
 
+    # --- High-pass (detrended) residuals ---
+    residual = x - trend
+
+    # --- Local SPC boundaries around the trend ---
+    sigma_hat = 1.4826 * np.median(np.abs(residual - np.median(residual)))  # robust std estimate
+    upper = trend + n_std * sigma_hat
+    lower = trend - n_std * sigma_hat
+
+    # --- Detect outliers ---
+    mask = (x > upper) | (x < lower)
     outliers = pd.DataFrame({"temperature": x[mask]}, index=s.index[mask])
 
-    # Plot
+    # --- Plot ---
     fig, ax = plt.subplots(figsize=(14, 4))
-    ax.plot(s.index, x, lw=0.7, label="Temperature (°C)")
-    ax.scatter(outliers.index, outliers["temperature"], color="red", s=12, label=f"Outliers ({len(outliers)})")
-    ax.axhline(lower, color="orange", ls="--")
-    ax.axhline(upper, color="orange", ls="--")
-    ax.set_title("Temperature Outliers (DCT + SPC)")
+    ax.plot(s.index, x, lw=0.8, label="Temperature (°C)", alpha=0.8)
+    ax.plot(s.index, trend, color="black", lw=1.2, label="Low-pass trend")
+    ax.fill_between(s.index, lower, upper, color="orange", alpha=0.2,
+                    label=f"SPC limits (±{n_std:.1f}σ)")
+    ax.scatter(outliers.index, outliers["temperature"], color="red", s=12, zorder=5,
+               label=f"Outliers ({len(outliers)})")
+
+    ax.set_title("Temperature Outliers (Highpass–Lowpass + Trend-following SPC)")
     ax.legend()
     plt.tight_layout()
     st.pyplot(fig)
