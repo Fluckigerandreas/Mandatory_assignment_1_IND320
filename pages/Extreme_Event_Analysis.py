@@ -151,7 +151,7 @@ st.title("New B: Outlier & Anomaly Analysis")
 
 city_name = st.selectbox("Select city", [c["city"] for c in price_areas])
 city_info = next(c for c in price_areas if c["city"] == city_name)
-year = st.number_input("Select year", min_value=2000, max_value=2025, value=2019)
+year = st.number_input("Select year", min_value=2000, max_value=2025, value=2021)
 
 weather_df = download_era5_openmeteo(city_info["latitude"], city_info["longitude"], year)
 st.write(f"✅ Loaded weather data for {city_name} ({len(weather_df)} rows)")
