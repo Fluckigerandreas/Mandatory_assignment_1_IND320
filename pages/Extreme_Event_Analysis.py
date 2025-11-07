@@ -138,7 +138,8 @@ def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
         return pd.DataFrame(columns=[precip_col])
 
     # --- Fit LOF ---
-    lof = LocalOutlierFactor(n_neighbors=20)
+    n_neighbors = min(len(X_nonzero) - 1, 20)
+    lof = LocalOutlierFactor(n_neighbors=n_neighbors)
     lof.fit(X_nonzero)
 
     scores = -lof.negative_outlier_factor_
