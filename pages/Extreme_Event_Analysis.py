@@ -124,24 +124,28 @@ def detect_temperature_outliers_filter(df, temp_col="temperature_2m", cutoff_hou
 # LOF PRECIPITATION ANOMALIES
 # ======================================================
 def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
-    """Detect precipitation anomalies using Local Outlier Factor and visualize with Plotly."""
+    """Detect precipitation anomalies using LOF (custom quantile threshold) and show interactive Plotly plot."""
     p = df[precip_col].fillna(0).sort_index()
     X = p.values.reshape(-1, 1)
 
-    lof = LocalOutlierFactor(
-        n_neighbors=min(len(p) - 1, 20),
-        contamination=proportion
-    )
-    y_pred = lof.fit_predict(X)
+    # Fit LOF once (ignore contamination parameter)
+    n_neighbors = max(5, int(len(p) * 0.02))
+    n_neighbors = min(n_neighbors, len(p) - 1)
+    lof = LocalOutlierFactor(n_neighbors=n_neighbors, contamination='auto')
+    lof.fit(X)
+
+    scores = -lof.negative_outlier_factor_
+    threshold = np.quantile(scores, 1 - proportion)
+    mask = scores > threshold
+
     outliers = pd.DataFrame(
-        {"precipitation": p.values[y_pred == -1]},
-        index=p.index[y_pred == -1]
+        {"precipitation": p.values[mask]},
+        index=p.index[mask]
     )
 
     # --- Interactive Plotly chart ---
     fig = go.Figure()
 
-    # Main precipitation line
     fig.add_trace(go.Scatter(
         x=p.index, y=p.values,
         mode="lines",
@@ -150,7 +154,6 @@ def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
         hovertemplate="%{x}<br>Precip: %{y:.2f} mm<extra></extra>"
     ))
 
-    # Outlier points
     fig.add_trace(go.Scatter(
         x=outliers.index, y=outliers["precipitation"],
         mode="markers",
@@ -160,12 +163,11 @@ def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
     ))
 
     fig.update_layout(
-        title=f"Precipitation Anomalies (LOF, proportion={proportion:.3f})",
+        title=f"Precipitation Anomalies (LOF) — proportion={proportion:.3f}, n_neighbors={n_neighbors}",
         xaxis_title="Time",
         yaxis_title="Precipitation (mm)",
         template="plotly_white",
         hovermode="x unified",
-        legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.5)"),
         height=450,
     )
 
