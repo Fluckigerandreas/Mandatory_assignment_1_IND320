@@ -124,54 +124,100 @@ def detect_temperature_outliers_filter(df, temp_col="temperature_2m", cutoff_hou
 # LOF PRECIPITATION ANOMALIES
 # ======================================================
 def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
-    """Detect precipitation anomalies using LOF (custom quantile threshold) and show interactive Plotly plot."""
+    """
+    Detect precipitation anomalies using LOF with log-transform and smoothing.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Must contain a datetime index and a 'precipitation' column (mm/day or similar)
+    precip_col : str
+        Name of precipitation column
+    proportion : float
+        Expected proportion of anomalies (e.g., 0.01 = 1%)
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame of detected anomalies with timestamps and precipitation values
+    """
+
+    # --- Data preparation ---
     p = df[precip_col].fillna(0).sort_index()
-    X = p.values.reshape(-1, 1)
 
-    # Fit LOF once (ignore contamination parameter)
-    n_neighbors = max(5, int(len(p) * 0.02))
-    n_neighbors = min(n_neighbors, len(p) - 1)
-    lof = LocalOutlierFactor(n_neighbors=n_neighbors, contamination='auto')
-    lof.fit(X)
+    # Apply log-transform to handle heavy-tailed distribution
+    log_p = np.log1p(p.values)
 
+    # Apply smoothing (rolling mean) to stabilize LOF scores
+    smoothed = (
+        pd.Series(log_p)
+        .rolling(window=3, center=True, min_periods=1)
+        .mean()
+        .values
+    )
+
+    # --- Fit LOF model ---
+    n_neighbors = min(len(p) - 1, 20)
+    lof = LocalOutlierFactor(n_neighbors=n_neighbors)
+    lof.fit(smoothed.reshape(-1, 1))
+
+    # LOF scores (higher = more anomalous)
     scores = -lof.negative_outlier_factor_
+
+    # Compute threshold based on proportion
     threshold = np.quantile(scores, 1 - proportion)
     mask = scores > threshold
 
-    outliers = pd.DataFrame(
-        {"precipitation": p.values[mask]},
-        index=p.index[mask]
-    )
+    # Extract anomalies
+    outliers = pd.DataFrame({"precipitation": p[mask]}, index=p.index[mask])
 
     # --- Interactive Plotly chart ---
     fig = go.Figure()
 
-    fig.add_trace(go.Scatter(
-        x=p.index, y=p.values,
-        mode="lines",
-        name="Precipitation (mm)",
-        line=dict(width=1.2, color="blue"),
-        hovertemplate="%{x}<br>Precip: %{y:.2f} mm<extra></extra>"
-    ))
+    # Main precipitation line
+    fig.add_trace(
+        go.Scatter(
+            x=p.index,
+            y=p.values,
+            mode="lines",
+            name="Precipitation (mm)",
+            line=dict(width=1.2, color="blue"),
+            hovertemplate="%{x}<br>Precip: %{y:.2f} mm<extra></extra>",
+        )
+    )
 
-    fig.add_trace(go.Scatter(
-        x=outliers.index, y=outliers["precipitation"],
-        mode="markers",
-        name=f"LOF anomalies ({len(outliers)})",
-        marker=dict(color="red", size=6, line=dict(width=1, color="darkred")),
-        hovertemplate="Outlier<br>%{x}<br>Precip: %{y:.2f} mm<extra></extra>"
-    ))
+    # Anomaly markers
+    fig.add_trace(
+        go.Scatter(
+            x=outliers.index,
+            y=outliers["precipitation"],
+            mode="markers",
+            name=f"LOF anomalies ({len(outliers)})",
+            marker=dict(color="red", size=6, line=dict(width=1, color="darkred")),
+            hovertemplate="Outlier<br>%{x}<br>Precip: %{y:.2f} mm<extra></extra>",
+        )
+    )
 
+    # Layout
     fig.update_layout(
-        title=f"Precipitation Anomalies (LOF) — proportion={proportion:.3f}, n_neighbors={n_neighbors}",
+        title="Precipitation Anomalies (LOF with Log + Smoothing)",
         xaxis_title="Time",
         yaxis_title="Precipitation (mm)",
         template="plotly_white",
         hovermode="x unified",
+        legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.5)"),
         height=450,
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+    # Display summary
+    st.markdown(
+        f"**Detected {len(outliers)} anomalies** "
+        f"out of {len(p)} observations "
+        f"({100 * proportion:.1f}% proportion target)"
+    )
+
     return outliers
 
 # ======================================================
