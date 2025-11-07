@@ -199,8 +199,7 @@ with tab2:
     st.header("Precipitation Anomalies (LOF)")
     proportion = st.slider(
         "Proportion of anomalies",
-        min_value=0.001, max_value=0.1, value=0.01, step=0.01
-    )
+        min_value=0.001, max_value=0.1, value=0.01, step=0.005)
     precip_outliers = detect_precipitation_lof(weather_df, proportion=proportion)
     st.write(f"Total anomalies detected: {len(precip_outliers)}")
     st.dataframe(precip_outliers.head(20))
