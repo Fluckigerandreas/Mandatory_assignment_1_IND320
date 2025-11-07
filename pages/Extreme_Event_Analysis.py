@@ -125,50 +125,35 @@ def detect_temperature_outliers_filter(df, temp_col="temperature_2m", cutoff_hou
 # ======================================================
 def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
     """
-    Detect precipitation anomalies using LOF with log-transform and interactive Plotly visualization.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame containing a datetime index and precipitation column
-    precip_col : str
-        Column name for precipitation values
-    proportion : float
-        Fraction of data considered anomalies (0-1)
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame containing detected anomalies with timestamps
+    Detect extreme precipitation anomalies using LOF on non-zero values.
     """
-    # --- Prepare data ---
     p = df[precip_col].fillna(0).sort_index()
 
-    # Log-transform to handle skewed data
-    log_p = np.log1p(p.values)
+    # --- Only consider non-zero precipitation values ---
+    nonzero_mask = p.values > 0
+    X_nonzero = np.log1p(p.values[nonzero_mask]).reshape(-1, 1)  # log-transform
 
-    # Optional: small rolling mean to stabilize LOF scores
-    smoothed = pd.Series(log_p).rolling(window=3, center=True, min_periods=1).mean().values
+    if len(X_nonzero) == 0:
+        st.warning("No non-zero precipitation values to analyze.")
+        return pd.DataFrame(columns=[precip_col])
 
     # --- Fit LOF ---
-    n_neighbors = min(len(p) - 1, 20)
+    n_neighbors = min(len(X_nonzero) - 1, 20)
     lof = LocalOutlierFactor(n_neighbors=n_neighbors)
-    lof.fit(smoothed.reshape(-1,1))
+    lof.fit(X_nonzero)
 
-    # Get LOF scores
     scores = -lof.negative_outlier_factor_
-
-    # Compute threshold based on proportion
     threshold = np.quantile(scores, 1 - proportion)
-    mask = scores > threshold
+    outlier_mask = scores > threshold
 
-    # Extract anomalies
-    outliers = pd.DataFrame({"precipitation": p[mask]}, index=p.index[mask])
+    # Map anomalies back to original index
+    outliers = pd.DataFrame(
+        {precip_col: p.values[nonzero_mask][outlier_mask]},
+        index=p.index[nonzero_mask][outlier_mask]
+    )
 
     # --- Interactive Plotly chart ---
     fig = go.Figure()
-
-    # Main precipitation line
     fig.add_trace(go.Scatter(
         x=p.index, y=p.values,
         mode="lines",
@@ -176,18 +161,15 @@ def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
         line=dict(width=1.2, color="blue"),
         hovertemplate="%{x}<br>Precip: %{y:.2f} mm<extra></extra>"
     ))
-
-    # Outlier markers
     fig.add_trace(go.Scatter(
-        x=outliers.index, y=outliers["precipitation"],
+        x=outliers.index, y=outliers[precip_col],
         mode="markers",
         name=f"LOF anomalies ({len(outliers)})",
         marker=dict(color="red", size=6, line=dict(width=1, color="darkred")),
         hovertemplate="Outlier<br>%{x}<br>Precip: %{y:.2f} mm<extra></extra>"
     ))
-
     fig.update_layout(
-        title=f"Precipitation Anomalies (LOF with Log + Smoothing, proportion={proportion:.3f})",
+        title=f"Extreme Precipitation Anomalies (LOF, proportion={proportion:.3f})",
         xaxis_title="Time",
         yaxis_title="Precipitation (mm)",
         template="plotly_white",
@@ -197,7 +179,6 @@ def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
     )
 
     st.plotly_chart(fig, use_container_width=True)
-
     return outliers
 
 # ======================================================
@@ -227,7 +208,8 @@ with tab2:
     st.header("Precipitation Anomalies (LOF)")
     proportion = st.slider(
         "Proportion of anomalies",
-        min_value=0.001, max_value=0.1, value=0.01, step=0.01)
+        min_value=0.001, max_value=0.1, value=0.01, step=0.005
+    )
     precip_outliers = detect_precipitation_lof(weather_df, proportion=proportion)
-    st.write(f"Total anomalies detected: {len(precip_outliers)}")
+    st.write(f"**Total anomalies detected:** {len(precip_outliers)}")
     st.dataframe(precip_outliers.head(20))
