@@ -120,12 +120,9 @@ def detect_temperature_outliers_filter(df, temp_col="temperature_2m", cutoff_hou
 
     return outliers
 
-# ======================================================
-# LOF PRECIPITATION ANOMALIES
-# ======================================================
-def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
+def detect_precipitation_lof(df, precip_col="precipitation", contamination=0.01):
     """
-    Detect extreme precipitation anomalies using LOF on non-zero values.
+    Detect extreme precipitation anomalies using LOF with contamination parameter.
     """
     p = df[precip_col].fillna(0).sort_index()
 
@@ -137,19 +134,15 @@ def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
         st.warning("No non-zero precipitation values to analyze.")
         return pd.DataFrame(columns=[precip_col])
 
-    # --- Fit LOF ---
+    # --- Fit LOF using contamination ---
     n_neighbors = min(len(X_nonzero) - 1, 20)
-    lof = LocalOutlierFactor(n_neighbors=n_neighbors)
-    lof.fit(X_nonzero)
-
-    scores = -lof.negative_outlier_factor_
-    threshold = np.quantile(scores, 1 - proportion)
-    outlier_mask = scores > threshold
+    lof = LocalOutlierFactor(n_neighbors=n_neighbors, contamination=contamination)
+    y_pred = lof.fit_predict(X_nonzero)  # -1 = outlier, 1 = inlier
 
     # Map anomalies back to original index
     outliers = pd.DataFrame(
-        {precip_col: p.values[nonzero_mask][outlier_mask]},
-        index=p.index[nonzero_mask][outlier_mask]
+        {precip_col: p.values[nonzero_mask][y_pred == -1]},
+        index=p.index[nonzero_mask][y_pred == -1]
     )
 
     # --- Interactive Plotly chart ---
@@ -169,7 +162,7 @@ def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
         hovertemplate="Outlier<br>%{x}<br>Precip: %{y:.2f} mm<extra></extra>"
     ))
     fig.update_layout(
-        title=f"Extreme Precipitation Anomalies (LOF, proportion={proportion:.3f})",
+        title=f"Extreme Precipitation Anomalies (LOF, contamination={contamination:.3f})",
         xaxis_title="Time",
         yaxis_title="Precipitation (mm)",
         template="plotly_white",
@@ -206,10 +199,13 @@ with tab1:
 
 with tab2:
     st.header("Precipitation Anomalies (LOF)")
-    proportion = st.slider(
-        "Proportion of anomalies",
-        min_value=0.001, max_value=0.1, value=0.01, step=0.01
+    contamination = st.slider(
+        "Proportion of anomalies (contamination)",
+        min_value=0.001,
+        max_value=0.1,
+        value=0.01,
+        step=0.01
     )
-    precip_outliers = detect_precipitation_lof(weather_df, proportion=proportion)
+    precip_outliers = detect_precipitation_lof(weather_df, contamination=contamination)
     st.write(f"**Total anomalies detected:** {len(precip_outliers)}")
     st.dataframe(precip_outliers.head(20))
