@@ -12,6 +12,7 @@ import requests_cache
 from retry_requests import retry
 import openmeteo_requests
 from scipy.signal import butter, filtfilt
+import plotly.graph_objects as go
 
 # ======================================================
 # PRICE AREAS (CITIES)
@@ -129,14 +130,39 @@ def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
     y_pred = lof.fit_predict(X)
     outliers = pd.DataFrame({"precipitation": p.values[y_pred == -1]}, index=p.index[y_pred == -1])
 
-    # Plot
-    fig, ax = plt.subplots(figsize=(14, 4))
-    ax.plot(p.index, p.values, lw=0.7, label="Precipitation (mm)")
-    ax.scatter(outliers.index, outliers["precipitation"], color="red", s=10, label=f"LOF anomalies ({len(outliers)})")
-    ax.set_title("Precipitation Anomalies (LOF)")
-    ax.legend()
-    plt.tight_layout()
-    st.pyplot(fig)
+    # --- Plotly interactive chart ---
+    fig = go.Figure()
+
+    # Main line for precipitation
+    fig.add_trace(go.Scatter(
+        x=p.index, y=p.values,
+        mode="lines",
+        name="Precipitation (mm)",
+        line=dict(width=1.2, color="blue"),
+        hovertemplate="%{x}<br>Precip: %{y:.2f} mm<extra></extra>"
+    ))
+
+    # Scatter for LOF anomalies
+    fig.add_trace(go.Scatter(
+        x=outliers.index, y=outliers["precipitation"],
+        mode="markers",
+        name=f"LOF anomalies ({len(outliers)})",
+        marker=dict(color="red", size=6, line=dict(width=1, color="darkred")),
+        hovertemplate="Outlier<br>%{x}<br>Precip: %{y:.2f} mm<extra></extra>"
+    ))
+
+    # Layout configuration
+    fig.update_layout(
+        title="Precipitation Anomalies (LOF)",
+        xaxis_title="Time",
+        yaxis_title="Precipitation (mm)",
+        template="plotly_white",
+        hovermode="x unified",
+        legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.5)"),
+        height=450,
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
 
     return outliers
 
