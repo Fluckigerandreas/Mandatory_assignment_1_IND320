@@ -124,16 +124,24 @@ def detect_temperature_outliers_filter(df, temp_col="temperature_2m", cutoff_hou
 # LOF PRECIPITATION ANOMALIES
 # ======================================================
 def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
+    """Detect precipitation anomalies using Local Outlier Factor and visualize with Plotly."""
     p = df[precip_col].fillna(0).sort_index()
     X = p.values.reshape(-1, 1)
-    lof = LocalOutlierFactor(n_neighbors=min(len(p) - 1, 20), contamination=proportion)
-    y_pred = lof.fit_predict(X)
-    outliers = pd.DataFrame({"precipitation": p.values[y_pred == -1]}, index=p.index[y_pred == -1])
 
-    # --- Plotly interactive chart ---
+    lof = LocalOutlierFactor(
+        n_neighbors=min(len(p) - 1, 20),
+        contamination=proportion
+    )
+    y_pred = lof.fit_predict(X)
+    outliers = pd.DataFrame(
+        {"precipitation": p.values[y_pred == -1]},
+        index=p.index[y_pred == -1]
+    )
+
+    # --- Interactive Plotly chart ---
     fig = go.Figure()
 
-    # Main line for precipitation
+    # Main precipitation line
     fig.add_trace(go.Scatter(
         x=p.index, y=p.values,
         mode="lines",
@@ -142,7 +150,7 @@ def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
         hovertemplate="%{x}<br>Precip: %{y:.2f} mm<extra></extra>"
     ))
 
-    # Scatter for LOF anomalies
+    # Outlier points
     fig.add_trace(go.Scatter(
         x=outliers.index, y=outliers["precipitation"],
         mode="markers",
@@ -151,9 +159,8 @@ def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
         hovertemplate="Outlier<br>%{x}<br>Precip: %{y:.2f} mm<extra></extra>"
     ))
 
-    # Layout configuration
     fig.update_layout(
-        title="Precipitation Anomalies (LOF)",
+        title=f"Precipitation Anomalies (LOF, proportion={proportion:.3f})",
         xaxis_title="Time",
         yaxis_title="Precipitation (mm)",
         template="plotly_white",
@@ -163,7 +170,6 @@ def detect_precipitation_lof(df, precip_col="precipitation", proportion=0.01):
     )
 
     st.plotly_chart(fig, use_container_width=True)
-
     return outliers
 
 # ======================================================
@@ -191,7 +197,10 @@ with tab1:
 
 with tab2:
     st.header("Precipitation Anomalies (LOF)")
-    proportion = st.slider("Proportion of anomalies", min_value=0.001, max_value=0.1, value=0.01, step=0.01)
+    proportion = st.slider(
+        "Proportion of anomalies",
+        min_value=0.001, max_value=0.1, value=0.01, step=0.01
+    )
     precip_outliers = detect_precipitation_lof(weather_df, proportion=proportion)
     st.write(f"Total anomalies detected: {len(precip_outliers)}")
     st.dataframe(precip_outliers.head(20))
