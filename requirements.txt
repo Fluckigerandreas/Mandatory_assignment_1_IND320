@@ -13,3 +13,4 @@ scipy
 scikit-learn
 streamlit-plotly-events
 shapely
+folium
