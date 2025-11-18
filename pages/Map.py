@@ -85,10 +85,12 @@ data_type = st.radio("Select data type:", ["Production", "Consumption"], horizon
 
 if data_type == "Production":
     df = prod_df
+    group_col = "productiongroup"
 else:
     df = cons_df
+    group_col = "consumptiongroup"
 
-groups = sorted(df["productiongroup"].unique())
+groups = sorted(df[group_col].unique())
 selected_group = st.selectbox("Select group:", groups)
 
 days = st.number_input("Time interval (days):", min_value=1, max_value=90, value=7)
@@ -96,7 +98,7 @@ days = st.number_input("Time interval (days):", min_value=1, max_value=90, value
 # ------------------------------------------------------------------------------
 # Filter data
 # ------------------------------------------------------------------------------
-df_group = df[df["productiongroup"] == selected_group]
+df_group = df[df[group_col] == selected_group]
 
 # Compute time window
 end_time = df_group.index.max()
