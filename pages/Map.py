@@ -18,7 +18,7 @@ with open("/workspaces/blank-app/file.geojson", "r") as f:
 # Assume your data has columns: date (datetime), price_area (NO1–NO5), group, value
 # Example:
 # df = pd.read_csv("/path/to/data.csv", parse_dates=["date"])
-df = pd.read_csv("/workspaces/blank-app/data.csv", parse_dates=["date"])
+df = pd.read_csv("/workspaces/blank-app/file.geojsonv", parse_dates=["date"])
 
 # -----------------------
 # Streamlit UI
