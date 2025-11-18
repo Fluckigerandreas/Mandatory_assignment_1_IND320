@@ -15,7 +15,7 @@ import certifi
 # ------------------------------------------------------------------------------
 st.title("Energy Map – Norway Price Areas (NO1–NO5)")
 
-geojson_path = "/workspaces/blank-app/file.geojson"
+geojson_path = "file.geojson"
 with open(geojson_path, "r", encoding="utf-8") as f:
     geojson_data = json.load(f)
 
