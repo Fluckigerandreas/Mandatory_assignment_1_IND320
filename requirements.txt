@@ -11,3 +11,4 @@ matplotlib
 statsmodels
 scipy
 scikit-learn
+streamlit_plotly_events
