@@ -152,21 +152,16 @@ days = st.sidebar.slider("Time interval (days):", min_value=1, max_value=90, val
 # ------------------------------------------------------------------------------
 # Compute mean per area for selected group and interval (cached)
 # ------------------------------------------------------------------------------
-@st.cache_data(show_spinner="Computing means per area...", suppress_st_warning=True)
-def compute_area_means(df_all: pd.DataFrame, group: str, days: int, price_areas_list):
-    if df_all.empty:
-        return {pa: 0.0 for pa in price_areas_list}
-
-    end_time = df_all["starttime"].max()
-    start_time = end_time - timedelta(days=days)
-    mask = (df_all["productiongroup"] == group) & (df_all["starttime"].between(start_time, end_time))
-    df_filt = df_all.loc[mask]
-
-    # Mean per pricearea
-    means = df_filt.groupby("pricearea")["quantitykwh"].mean().to_dict()
-    # ensure all geo price areas exist, fill missing with 0
-    result = {pa: float(means.get(pa, 0.0)) for pa in price_areas_list}
-    return result
+@st.cache_data(show_spinner="Computing means per area...")
+def compute_area_means(variable, days, df):
+    means = {}
+    for area in df["pricearea"].unique():
+        df_area = df[df["pricearea"] == area]
+        end_time = df_area.index.max()
+        start_time = end_time - timedelta(days=days)
+        df_period = df_area[(df_area.index >= start_time) & (df_area.index <= end_time)]
+        means[area] = float(df_period[variable].mean())
+    return means
 
 st.session_state.area_means = compute_area_means(df, group_selected, days, price_areas_geo)
 means = st.session_state.area_means
