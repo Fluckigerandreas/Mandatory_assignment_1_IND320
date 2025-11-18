@@ -70,10 +70,7 @@ def load_consumption():
 
     df = pd.DataFrame(data)
     df["starttime"] = pd.to_datetime(df["starttime"])
-    df = df.groupby(
-        ["pricearea", "productiongroup", "starttime"],
-        as_index=False
-    ).agg({"quantitykwh": "sum"})
+    df = df.groupby(["pricearea", "consumptiongroup", "starttime"], as_index=False).agg({"quantitykwh": "sum"})
 
     df.set_index("starttime", inplace=True)
     return df
