@@ -16,7 +16,7 @@ st.title("Norway Price Areas Map (NO1–NO5)")
 # ------------------------------------------------------------------------------
 # Paths
 # ------------------------------------------------------------------------------
-geojson_path = Path(__file__).parent / "data" / "ElSpot_omraade.geojson"
+geojson_path = "/workspaces/blank-app/file.geojson"
 
 # ------------------------------------------------------------------------------
 # Utility: normalize area name (e.g. "NO 2" -> "NO2")
