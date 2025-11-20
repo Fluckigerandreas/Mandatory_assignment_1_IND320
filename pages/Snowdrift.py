@@ -11,7 +11,7 @@ import requests_cache
 from openmeteo_requests import Client as openmeteo_requests
 from retry import retry
 
-# ------------------- Snow drift functions (from Snow_drift.py) -------------------
+# ------------------- Snow drift functions -------------------
 def compute_Qupot(hourly_wind_speeds, dt=3600):
     total = sum((u ** 3.8) * dt for u in hourly_wind_speeds) / 233847
     return total
@@ -97,10 +97,6 @@ def plot_wind_rose(avg_sector_values, overall_avg):
 # ------------------- Open-Meteo ERA5 downloader -------------------
 @st.cache_data(show_spinner="Downloading weather data...")
 def download_era5_openmeteo(lat, lon, year, timezone="Europe/Oslo"):
-    import requests_cache
-    from openmeteo_requests import Client as openmeteo_requests
-    from retry import retry
-
     cache_session = requests_cache.CachedSession(".cache", expire_after=-1)
     retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
     client = openmeteo_requests.Client(session=retry_session)
@@ -136,7 +132,7 @@ def download_era5_openmeteo(lat, lon, year, timezone="Europe/Oslo"):
     df['season'] = df.index.to_series().apply(lambda dt: dt.year if dt.month >= 7 else dt.year - 1)
     return df
 
-# ------------------- Streamlit UI -------------------
+# ------------------- Streamlit App -------------------
 st.title("Snow Drift Analysis with Map Selection & Open-Meteo Data")
 
 # --- Load GeoJSON map ---
@@ -167,11 +163,12 @@ map_data = st_folium(m, width=900, height=500)
 
 # --- Handle click ---
 if map_data and map_data.get("last_clicked"):
-    lat = map_data["last_clicked"]["lat"]
-    lon = map_data["last_clicked"]["lng"]
-    st.session_state.clicked_point = (lat, lon)
+    st.session_state.clicked_point = (
+        map_data["last_clicked"]["lat"],
+        map_data["last_clicked"]["lng"]
+    )
 
-    p = Point(lon, lat)
+    p = Point(st.session_state.clicked_point[1], st.session_state.clicked_point[0])  # Point(lon, lat)
     clicked_area = None
     for feature in geojson_data["features"]:
         polygon = shape(feature["geometry"])
@@ -181,10 +178,11 @@ if map_data and map_data.get("last_clicked"):
     st.session_state.selected_area = clicked_area
     st.experimental_rerun()
 
-if st.session_state.selected_area:
+# --- Snow drift calculation ---
+if st.session_state.selected_area and st.session_state.clicked_point:
     st.success(f"Selected area: **{st.session_state.selected_area}**")
+    lat, lon = st.session_state.clicked_point  # ✅ use session_state
 
-    # --- Select year range ---
     start_year = st.number_input("Start Year", min_value=1950, max_value=datetime.now().year, value=2020)
     end_year = st.number_input("End Year", min_value=start_year, max_value=datetime.now().year, value=2022)
 
@@ -193,7 +191,7 @@ if st.session_state.selected_area:
     theta = 0.5
 
     all_years_df = []
-    for year in range(start_year, end_year+1):
+    for year in range(start_year, end_year + 1):
         df_year = download_era5_openmeteo(lat, lon, year)
         all_years_df.append(df_year)
     df_all = pd.concat(all_years_df)
@@ -206,7 +204,7 @@ if st.session_state.selected_area:
         st.subheader("Yearly Snow Drift (Qt)")
         st.dataframe(yearly_df[['season', 'Qt (tonnes/m)', 'Control']])
 
-        # Plot Qt
+        # Plot Qt bar chart
         fig_bar = go.Figure([go.Bar(x=yearly_df['season'], y=yearly_df['Qt (tonnes/m)'], marker_color='skyblue')])
         fig_bar.update_layout(title="Yearly Snow Drift", yaxis_title="Qt (tonnes/m)")
         st.plotly_chart(fig_bar)
