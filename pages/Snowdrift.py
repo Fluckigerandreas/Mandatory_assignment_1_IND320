@@ -1,10 +1,17 @@
 import streamlit as st
+import folium
+from streamlit_folium import st_folium
+import json
+from shapely.geometry import shape, Point
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime
+import requests_cache
+from openmeteo_requests import Client as openmeteo_requests
+from retry import retry
 
-# --- Functions from Snow_drift.py ---
+# ------------------- Snow drift functions (from Snow_drift.py) -------------------
 def compute_Qupot(hourly_wind_speeds, dt=3600):
     total = sum((u ** 3.8) * dt for u in hourly_wind_speeds) / 233847
     return total
@@ -42,9 +49,9 @@ def compute_yearly_results(df, T, F, theta):
         if df_season.empty:
             continue
         df_season['Swe_hourly'] = df_season.apply(
-            lambda row: row['precipitation (mm)'] if row['temperature_2m (°C)'] < 1 else 0, axis=1)
+            lambda row: row['precipitation'] if row['temperature_2m'] < 1 else 0, axis=1)
         total_Swe = df_season['Swe_hourly'].sum()
-        wind_speeds = df_season["wind_speed_10m (m/s)"].tolist()
+        wind_speeds = df_season["wind_speed_10m"].tolist()
         result = compute_snow_transport(T, F, theta, total_Swe, wind_speeds)
         result["season"] = f"{s}-{s+1}"
         results_list.append(result)
@@ -55,9 +62,9 @@ def compute_average_sector(df):
     for s, group in df.groupby('season'):
         group = group.copy()
         group['Swe_hourly'] = group.apply(
-            lambda row: row['precipitation (mm)'] if row['temperature_2m (°C)'] < 1 else 0, axis=1)
-        ws = group["wind_speed_10m (m/s)"].tolist()
-        wdir = group["wind_direction_10m (°)"].tolist()
+            lambda row: row['precipitation'] if row['temperature_2m'] < 1 else 0, axis=1)
+        ws = group["wind_speed_10m"].tolist()
+        wdir = group["wind_direction_10m"].tolist()
         sectors = compute_sector_transport(ws, wdir)
         sectors_list.append(sectors)
     avg_sectors = np.mean(sectors_list, axis=0)
@@ -68,7 +75,6 @@ def plot_wind_rose(avg_sector_values, overall_avg):
                   'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
     theta = np.linspace(0, 360, 16, endpoint=False)
     r = np.array(avg_sector_values) / 1000.0  # kg/m → tonnes/m
-
     fig = go.Figure()
     fig.add_trace(go.Barpolar(
         r=r,
@@ -79,7 +85,6 @@ def plot_wind_rose(avg_sector_values, overall_avg):
         marker_line_width=1,
         opacity=0.8
     ))
-
     fig.update_layout(
         title=f"Average Directional Distribution of Snow Transport<br>Overall Average Qt: {overall_avg/1000:.1f} tonnes/m",
         polar=dict(
@@ -89,55 +94,127 @@ def plot_wind_rose(avg_sector_values, overall_avg):
     )
     st.plotly_chart(fig)
 
-# --- Streamlit UI ---
-st.title("Snow Drift Calculator & Wind Rose Visualization")
+# ------------------- Open-Meteo ERA5 downloader -------------------
+@st.cache_data(show_spinner="Downloading weather data...")
+def download_era5_openmeteo(lat, lon, year, timezone="Europe/Oslo"):
+    import requests_cache
+    from openmeteo_requests import Client as openmeteo_requests
+    from retry import retry
 
-uploaded_file = st.file_uploader("Upload Open-Meteo CSV", type="csv")
+    cache_session = requests_cache.CachedSession(".cache", expire_after=-1)
+    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+    client = openmeteo_requests.Client(session=retry_session)
 
-if uploaded_file:
-    df = pd.read_csv(uploaded_file, skiprows=3)
-    df['time'] = pd.to_datetime(df['time'])
-    df['season'] = df['time'].apply(lambda dt: dt.year if dt.month >= 7 else dt.year - 1)
+    url = "https://archive-api.open-meteo.com/v1/archive"
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "start_date": f"{year}-01-01",
+        "end_date": f"{year}-12-31",
+        "hourly": ["temperature_2m", "precipitation", "wind_speed_10m", "wind_gusts_10m", "wind_direction_10m"],
+        "models": "era5",
+        "timezone": timezone,
+    }
 
-    # Check coordinates selection (dummy here: require lat/lon columns)
-    if "latitude" not in df.columns or "longitude" not in df.columns:
-        st.error("Coordinate selection missing in the data. Cannot proceed.")
+    response = client.weather_api(url, params=params)[0]
+    hourly = response.Hourly()
+    df = pd.DataFrame({
+        "time": pd.date_range(
+            start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+            end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+            freq=pd.Timedelta(seconds=hourly.Interval()),
+            inclusive="left",
+        ),
+        "temperature_2m": hourly.Variables(0).ValuesAsNumpy(),
+        "precipitation": hourly.Variables(1).ValuesAsNumpy(),
+        "wind_speed_10m": hourly.Variables(2).ValuesAsNumpy(),
+        "wind_gusts_10m": hourly.Variables(3).ValuesAsNumpy(),
+        "wind_direction_10m": hourly.Variables(4).ValuesAsNumpy(),
+    })
+    df["time"] = df["time"].dt.tz_convert(timezone)
+    df.set_index("time", inplace=True)
+    df['season'] = df.index.to_series().apply(lambda dt: dt.year if dt.month >= 7 else dt.year - 1)
+    return df
+
+# ------------------- Streamlit UI -------------------
+st.title("Snow Drift Analysis with Map Selection & Open-Meteo Data")
+
+# --- Load GeoJSON map ---
+geojson_path = "file.geojson"
+with open(geojson_path, "r", encoding="utf-8") as f:
+    geojson_data = json.load(f)
+
+if "clicked_point" not in st.session_state:
+    st.session_state.clicked_point = None
+if "selected_area" not in st.session_state:
+    st.session_state.selected_area = None
+
+# --- Build Folium map ---
+m = folium.Map(location=[63.0, 10.5], zoom_start=5.2)
+def style_function(feature):
+    if st.session_state.selected_area == feature["properties"]["ElSpotOmr"]:
+        return {"fillColor":"red","color":"red","weight":3,"fillOpacity":0.6}
     else:
-        st.success("Coordinates found.")
+        return {"fillColor":"blue","color":"blue","weight":1,"fillOpacity":0.3}
 
-        min_year, max_year = int(df['season'].min()), int(df['season'].max())
-        year_range = st.slider("Select Year Range", min_year, max_year, (min_year, max_year))
+folium.GeoJson(geojson_data, name="Areas", style_function=style_function,
+               tooltip=folium.GeoJsonTooltip(fields=["ElSpotOmr"], aliases=["Area:"])).add_to(m)
 
-        df_selected = df[(df['season'] >= year_range[0]) & (df['season'] <= year_range[1])]
+if st.session_state.clicked_point:
+    folium.Marker(st.session_state.clicked_point, icon=folium.Icon(color="red")).add_to(m)
 
-        T = 3000
-        F = 30000
-        theta = 0.5
+map_data = st_folium(m, width=900, height=500)
 
-        yearly_df = compute_yearly_results(df_selected, T, F, theta)
+# --- Handle click ---
+if map_data and map_data.get("last_clicked"):
+    lat = map_data["last_clicked"]["lat"]
+    lon = map_data["last_clicked"]["lng"]
+    st.session_state.clicked_point = (lat, lon)
 
-        if yearly_df.empty:
-            st.warning("No data available for the selected year range.")
-        else:
-            st.subheader("Yearly Snow Drift (Qt in tonnes/m)")
-            yearly_df['Qt (tonnes/m)'] = yearly_df['Qt'] / 1000.0
-            st.dataframe(yearly_df[['season', 'Qt (tonnes/m)', 'Control']])
+    p = Point(lon, lat)
+    clicked_area = None
+    for feature in geojson_data["features"]:
+        polygon = shape(feature["geometry"])
+        if polygon.contains(p):
+            clicked_area = feature["properties"]["ElSpotOmr"]
+            break
+    st.session_state.selected_area = clicked_area
+    st.experimental_rerun()
 
-            # Plot Qt as bar chart
-            fig_bar = go.Figure([go.Bar(
-                x=yearly_df['season'],
-                y=yearly_df['Qt (tonnes/m)'],
-                text=yearly_df['Control'],
-                marker_color='skyblue'
-            )])
-            fig_bar.update_layout(title="Yearly Snow Drift", yaxis_title="Qt (tonnes/m)")
-            st.plotly_chart(fig_bar)
+if st.session_state.selected_area:
+    st.success(f"Selected area: **{st.session_state.selected_area}**")
 
-            # Wind rose
-            avg_sectors = compute_average_sector(df_selected)
-            overall_avg = yearly_df['Qt'].mean()
-            st.subheader("Wind Rose of Snow Transport")
-            plot_wind_rose(avg_sectors, overall_avg)
+    # --- Select year range ---
+    start_year = st.number_input("Start Year", min_value=1950, max_value=datetime.now().year, value=2020)
+    end_year = st.number_input("End Year", min_value=start_year, max_value=datetime.now().year, value=2022)
 
+    T = 3000
+    F = 30000
+    theta = 0.5
+
+    all_years_df = []
+    for year in range(start_year, end_year+1):
+        df_year = download_era5_openmeteo(lat, lon, year)
+        all_years_df.append(df_year)
+    df_all = pd.concat(all_years_df)
+
+    yearly_df = compute_yearly_results(df_all, T, F, theta)
+    if yearly_df.empty:
+        st.warning("No snow drift data available for the selected range.")
+    else:
+        yearly_df['Qt (tonnes/m)'] = yearly_df['Qt'] / 1000
+        st.subheader("Yearly Snow Drift (Qt)")
+        st.dataframe(yearly_df[['season', 'Qt (tonnes/m)', 'Control']])
+
+        # Plot Qt
+        fig_bar = go.Figure([go.Bar(x=yearly_df['season'], y=yearly_df['Qt (tonnes/m)'], marker_color='skyblue')])
+        fig_bar.update_layout(title="Yearly Snow Drift", yaxis_title="Qt (tonnes/m)")
+        st.plotly_chart(fig_bar)
+
+        # Wind rose
+        avg_sectors = compute_average_sector(df_all)
+        overall_avg = yearly_df['Qt'].mean()
+        st.subheader("Wind Rose of Snow Transport")
+        plot_wind_rose(avg_sectors, overall_avg)
 else:
-    st.info("Please upload a CSV file to start.")
+    st.info("Click on the map to select a location.")
