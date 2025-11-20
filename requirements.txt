@@ -15,3 +15,4 @@ streamlit-plotly-events
 shapely
 folium
 streamlit_folium
+retry
