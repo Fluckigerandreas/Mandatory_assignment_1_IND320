@@ -9,7 +9,6 @@ import plotly.graph_objects as go
 from datetime import datetime
 import requests_cache
 from openmeteo_requests import Client as openmeteo_requests
-from retry import retry
 
 # ------------------- Snow drift functions -------------------
 def compute_Qupot(hourly_wind_speeds, dt=3600):
@@ -97,9 +96,9 @@ def plot_wind_rose(avg_sector_values, overall_avg):
 # ------------------- Open-Meteo ERA5 downloader -------------------
 @st.cache_data(show_spinner="Downloading weather data...")
 def download_era5_openmeteo(lat, lon, year, timezone="Europe/Oslo"):
-    cache_session = requests_cache.CachedSession(".cache", expire_after=-1)
-    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
-    client = openmeteo_requests.Client(session=retry_session)
+    # Cached session
+    session = requests_cache.CachedSession(".cache", expire_after=-1)
+    client = openmeteo_requests.Client(session=session)
 
     url = "https://archive-api.open-meteo.com/v1/archive"
     params = {
@@ -107,7 +106,8 @@ def download_era5_openmeteo(lat, lon, year, timezone="Europe/Oslo"):
         "longitude": lon,
         "start_date": f"{year}-01-01",
         "end_date": f"{year}-12-31",
-        "hourly": ["temperature_2m", "precipitation", "wind_speed_10m", "wind_gusts_10m", "wind_direction_10m"],
+        "hourly": ["temperature_2m", "precipitation", "wind_speed_10m", 
+                   "wind_gusts_10m", "wind_direction_10m"],
         "models": "era5",
         "timezone": timezone,
     }
