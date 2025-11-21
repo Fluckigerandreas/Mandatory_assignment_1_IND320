@@ -1,11 +1,13 @@
 import streamlit as st
-import pandas as pd
+import folium
+from streamlit_folium import st_folium
 import json
+from shapely.geometry import shape, Point
+import pandas as pd
 from datetime import timedelta
 from pymongo import MongoClient
 import certifi
-import plotly.express as px
-from shapely.geometry import shape, Point
+from matplotlib.colors import LinearSegmentedColormap, Normalize, to_hex
 
 # ------------------------------------------------------------------------------
 # Page title
@@ -15,7 +17,7 @@ st.title("Energy Map – Norway Price Areas (NO1–NO5)")
 # ------------------------------------------------------------------------------
 # Load GeoJSON for price areas
 # ------------------------------------------------------------------------------
-geojson_path = "file.geojson"  # replace with your file path
+geojson_path = "file.geojson"  # your local GeoJSON path
 with open(geojson_path, "r", encoding="utf-8") as f:
     geojson_data = json.load(f)
 
@@ -36,14 +38,11 @@ def load_production():
     uri = st.secrets["mongo"]["uri"]
     ca = certifi.where()
     client = MongoClient(uri, tls=True, tlsCAFile=ca)
-
     db = client["Elhub"]
     collection = db["Data"]
-
     data = list(collection.find())
     if not data:
         return pd.DataFrame()
-
     df = pd.DataFrame(data)
     df["starttime"] = pd.to_datetime(df["starttime"])
     df = df.groupby(["pricearea", "productiongroup", "starttime"], as_index=False).agg({"quantitykwh": "sum"})
@@ -55,14 +54,11 @@ def load_consumption():
     uri = st.secrets["mongo"]["uri"]
     ca = certifi.where()
     client = MongoClient(uri, tls=True, tlsCAFile=ca)
-
     db = client["Consumption_Elhub"]
     collection = db["Data"]
-
     data = list(collection.find())
     if not data:
         return pd.DataFrame()
-
     df = pd.DataFrame(data)
     df["starttime"] = pd.to_datetime(df["starttime"])
     df = df.groupby(["pricearea", "consumptiongroup", "starttime"], as_index=False).agg({"quantitykwh": "sum"})
@@ -92,65 +88,106 @@ days = st.number_input("Time interval (days):", min_value=1, max_value=90, value
 # Filter data
 # ------------------------------------------------------------------------------
 df_group = df[df[group_col] == selected_group]
-
-# Compute time window
 end_time = df_group.index.max()
 start_time = end_time - timedelta(days=days)
 df_interval = df_group[(df_group.index >= start_time) & (df_group.index <= end_time)]
 
 # Compute mean per price area
 area_means = df_interval.groupby("pricearea")["quantitykwh"].mean().to_dict()
-
 if not area_means:
     st.warning("No data available for this selection.")
     st.stop()
 
-# Store area_means in session for access in Plotly
-st.session_state.area_means = area_means
+# ------------------------------------------------------------------------------
+# Prepare normalization and custom color spectrum
+# ------------------------------------------------------------------------------
+vmin = min(area_means.values())
+vmax = max(area_means.values())
+if vmax - vmin < 1e-9:
+    vmax = vmin + 1e-9
+
+norm = Normalize(vmin=vmin, vmax=vmax)
+cmap = LinearSegmentedColormap.from_list("custom_spectrum", ["green", "blue", "yellow"])
 
 # ------------------------------------------------------------------------------
-# Create Plotly choropleth
+# Define style function for Folium
 # ------------------------------------------------------------------------------
-df_plot = pd.DataFrame({
-    "pricearea": list(area_means.keys()),
-    "mean_value": list(area_means.values())
-})
-
-fig = px.choropleth_mapbox(
-    df_plot,
-    geojson=geojson_data,
-    locations="pricearea",
-    featureidkey="properties.ElSpotOmr",
-    color="mean_value",
-    color_continuous_scale=["green", "blue", "yellow"],  # custom scale
-    mapbox_style="carto-positron",
-    zoom=5.2,
-    center={"lat": 63.0, "lon": 10.5},
-    opacity=0.7,
-    labels={"mean_value": f"Mean {selected_group} ({data_type}) kWh"}
-)
-
-fig.update_traces(
-    hovertemplate="<b>%{location}</b><br>Mean value: %{z:.2f} kWh<extra></extra>"
-)
-
-# ------------------------------------------------------------------------------
-# Display Plotly map
-# ------------------------------------------------------------------------------
-st.plotly_chart(fig, use_container_width=True)
-
-# ------------------------------------------------------------------------------
-# Handle clicks on the map (requires Plotly click event workaround)
-# ------------------------------------------------------------------------------
-clicked = st.session_state.get("clicked_point", None)
-st.write("### Clicked coordinates (use hover info for Plotly clicks):")
-if clicked:
-    st.write(f"Latitude = {clicked[0]:.5f}, Longitude = {clicked[1]:.5f}")
-else:
-    st.info("Hover over areas to see values; Plotly does not directly provide click coordinates.")
+def style_function(feature):
+    area = feature["properties"]["ElSpotOmr"]
+    if area in area_means:
+        normalized_val = norm(area_means[area])
+        color = to_hex(cmap(normalized_val))
+    else:
+        color = "#cccccc"
     
+    if area == st.session_state.selected_area:
+        return {
+            "fillColor": color,
+            "color": "red",
+            "weight": 3,
+            "fillOpacity": 0.7,
+        }
+    else:
+        return {
+            "fillColor": color,
+            "color": "black",
+            "weight": 1,
+            "fillOpacity": 0.5,
+        }
+
+# ------------------------------------------------------------------------------
+# Build Folium map
+# ------------------------------------------------------------------------------
+m = folium.Map(location=[63.0, 10.5], zoom_start=5.2)
+
+folium.GeoJson(
+    geojson_data,
+    name="NO Areas",
+    style_function=style_function,
+    tooltip=folium.GeoJsonTooltip(fields=["ElSpotOmr"], aliases=["Price area:"])
+).add_to(m)
+
+# Marker for clicked point
+if st.session_state.clicked_point:
+    folium.Marker(
+        st.session_state.clicked_point,
+        icon=folium.Icon(color="red", icon="info-sign")
+    ).add_to(m)
+
+map_data = st_folium(m, width=900, height=600)
+
+# ------------------------------------------------------------------------------
+# Show clicked coordinates
+# ------------------------------------------------------------------------------
+if map_data and map_data.get("last_clicked"):
+    lat = map_data["last_clicked"]["lat"]
+    lon = map_data["last_clicked"]["lng"]
+    st.write(f"**Clicked coordinates:** Latitude = {lat:.5f}, Longitude = {lon:.5f}")
+
+# ------------------------------------------------------------------------------
+# Detect selected area
+# ------------------------------------------------------------------------------
+if map_data and map_data.get("last_clicked"):
+    lat = map_data["last_clicked"]["lat"]
+    lon = map_data["last_clicked"]["lng"]
+    st.session_state.clicked_point = (lat, lon)
+
+    p = Point(lon, lat)
+    clicked_area = None
+    for feature in geojson_data["features"]:
+        polygon = shape(feature["geometry"])
+        if polygon.contains(p):
+            clicked_area = feature["properties"]["ElSpotOmr"]
+            break
+
+    st.session_state.selected_area = clicked_area
+    st.rerun()
+
 # ------------------------------------------------------------------------------
 # Diagnostics
 # ------------------------------------------------------------------------------
 st.write("### Mean values per area:")
 st.json(area_means)
+
+if st.session_state.selected_area:
+    st.success(f"Selected area: **{st.session_state.selected_area}**")
