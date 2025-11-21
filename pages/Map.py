@@ -7,7 +7,6 @@ from datetime import timedelta
 from pymongo import MongoClient
 import certifi
 import pandas as pd
-import matplotlib.pyplot as plt
 
 st.title("Norway Price Areas Map – Elhub Data (NO1–NO5)")
 
@@ -26,6 +25,9 @@ if "clicked_point" not in st.session_state:
 
 if "selected_area" not in st.session_state:
     st.session_state.selected_area = None
+
+if "area_means" not in st.session_state:
+    st.session_state.area_means = {}
 
 # ------------------------------------------------------------------------------
 # MongoDB loaders
@@ -78,47 +80,26 @@ selected_group = st.selectbox("Select group:", groups)
 days = st.number_input("Time interval (days):", min_value=1, max_value=90, value=7)
 
 # ------------------------------------------------------------------------------
-# Compute mean per area
+# Compute mean per area and store in session state
 # ------------------------------------------------------------------------------
-df_group = df[df[group_col] == selected_group]
-end_time = df_group.index.max()
-start_time = end_time - timedelta(days=days)
-df_interval = df_group[(df_group.index >= start_time) & (df_group.index <= end_time)]
+def compute_area_means():
+    df_group = df[df[group_col] == selected_group]
+    if df_group.empty:
+        return {}
+    end_time = df_group.index.max()
+    start_time = end_time - timedelta(days=days)
+    df_interval = df_group[(df_group.index >= start_time) & (df_group.index <= end_time)]
+    return df_interval.groupby("pricearea")["quantitykwh"].mean().to_dict()
 
-area_means = df_interval.groupby("pricearea")["quantitykwh"].mean().to_dict()
+st.session_state.area_means = compute_area_means()
+area_means = st.session_state.area_means
+
 if not area_means:
     st.warning("No data available for this selection.")
     st.stop()
 
 # ------------------------------------------------------------------------------
-# Extract centroid coordinates
-# ------------------------------------------------------------------------------
-def get_area_centroids():
-    centroids = {}
-    for feature in geojson_data["features"]:
-        name = feature["properties"]["ElSpotOmr"]
-        polygon = shape(feature["geometry"])
-        centroid = polygon.centroid
-        centroids[name] = (centroid.y, centroid.x)  # lat, lon
-    return centroids
-
-centroids = get_area_centroids()
-
-# ------------------------------------------------------------------------------
-# Plot centroids
-# ------------------------------------------------------------------------------
-st.write("### Area centroids:")
-fig, ax = plt.subplots()
-for area, (lat, lon) in centroids.items():
-    ax.plot(lon, lat, "o", label=area)
-ax.set_xlabel("Longitude")
-ax.set_ylabel("Latitude")
-ax.set_title("Price Area Centroids")
-ax.legend()
-st.pyplot(fig)
-
-# ------------------------------------------------------------------------------
-# Color function
+# Color function based on current session state
 # ------------------------------------------------------------------------------
 vals = list(area_means.values())
 vmin, vmax = min(vals), max(vals)
@@ -147,7 +128,7 @@ folium.GeoJson(
     tooltip=folium.GeoJsonTooltip(fields=["ElSpotOmr"], aliases=["Price area:"])
 ).add_to(m)
 
-# Add clicked marker
+# Add marker for clicked point
 if st.session_state.clicked_point:
     folium.Marker(
         st.session_state.clicked_point,
@@ -182,3 +163,4 @@ st.json(area_means)
 
 if st.session_state.selected_area:
     st.success(f"Selected area: **{st.session_state.selected_area}**")
+st.write(f"Clicked coordinates: {st.session_state.clicked_point}")
