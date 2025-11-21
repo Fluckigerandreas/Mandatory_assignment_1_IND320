@@ -19,11 +19,8 @@ with open(geojson_path, "r", encoding="utf-8") as f:
 
 # Ensure consistent property name
 def extract_area_name(feature):
-    props = feature["properties"]
-    for key in ["Elspot_omr", "ELSPOT_OMR", "ElSpotOmr"]:
-        if key in props:
-            return props[key]
-    return None
+    return feature["properties"].get("ElSpotOmr")
+
 
 # --------------------------------------------------------------------------
 # Session state
@@ -127,7 +124,7 @@ folium.GeoJson(
     geojson_data,
     name="Price Areas",
     style_function=style_function,
-    tooltip=folium.GeoJsonTooltip(fields=["Elspot_omr"], aliases=["Area:"])
+    tooltip=folium.GeoJsonTooltip(fields=["ElSpotOmr"], aliases=["Area:"])
 ).add_to(m)
 
 # Marker
