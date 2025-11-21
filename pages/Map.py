@@ -118,17 +118,20 @@ choropleth_df = pd.DataFrame({
     "mean_value": list(area_means.values())
 })
 
+# Scale values to millions for legend readability
+choropleth_df["mean_value_millions"] = choropleth_df["mean_value"] / 1_000_000
+
 # Add choropleth
 folium.Choropleth(
     geo_data=geojson_data,
     name="Mean Values",
     data=choropleth_df,
-    columns=["pricearea", "mean_value"],
+    columns=["pricearea", "mean_value_millions"],
     key_on="feature.properties.ElSpotOmr",
     fill_color="YlOrRd",
     fill_opacity=0.7,
     line_opacity=0.5,
-    legend_name=f"Mean {selected_group} ({data_type}) kWh"
+    legend_name=f"Mean {selected_group} ({data_type}) M kWh"
 ).add_to(m)
 
 # Overlay GeoJson to allow selection highlighting
@@ -166,7 +169,15 @@ if st.session_state.clicked_point:
 map_data = st_folium(m, width=900, height=600)
 
 # ------------------------------------------------------------------------------
-# Handle clicks
+# Show clicked coordinates
+# ------------------------------------------------------------------------------
+if map_data and map_data.get("last_clicked"):
+    lat = map_data["last_clicked"]["lat"]
+    lon = map_data["last_clicked"]["lng"]
+    st.write(f"**Clicked coordinates:** Latitude = {lat:.5f}, Longitude = {lon:.5f}")
+
+# ------------------------------------------------------------------------------
+# Handle clicks for area detection and rerun
 # ------------------------------------------------------------------------------
 if map_data and map_data.get("last_clicked"):
     lat = map_data["last_clicked"]["lat"]
