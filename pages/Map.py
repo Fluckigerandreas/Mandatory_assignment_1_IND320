@@ -2,7 +2,7 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 import json
-from shapely.geometry import shape, Point
+from shapely.geometry import shape, Point, Polygon, MultiPolygon
 from datetime import timedelta
 from pymongo import MongoClient
 import certifi
@@ -10,55 +10,53 @@ import pandas as pd
 
 st.title("Norway Price Areas Map – Elhub Data (NO1–NO5)")
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Load GeoJSON
-# ------------------------------------------------------------------------------
-geojson_path = "file.geojson"  # replace with your path
+# --------------------------------------------------------------------------
+geojson_path = "file.geojson"
 with open(geojson_path, "r", encoding="utf-8") as f:
     geojson_data = json.load(f)
 
-# ------------------------------------------------------------------------------
+# Ensure consistent property name
+def extract_area_name(feature):
+    props = feature["properties"]
+    for key in ["Elspot_omr", "ELSPOT_OMR", "ElSpotOmr"]:
+        if key in props:
+            return props[key]
+    return None
+
+# --------------------------------------------------------------------------
 # Session state
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 if "clicked_point" not in st.session_state:
     st.session_state.clicked_point = None
-
 if "selected_area" not in st.session_state:
     st.session_state.selected_area = None
-
 if "area_means" not in st.session_state:
     st.session_state.area_means = {}
 
-# ------------------------------------------------------------------------------
-# MongoDB loaders
-# ------------------------------------------------------------------------------
-@st.cache_data(show_spinner="Loading Production data...")
+# --------------------------------------------------------------------------
+# Mongo Loaders
+# --------------------------------------------------------------------------
+@st.cache_data(show_spinner="Loading production data...")
 def load_production():
-    uri = st.secrets["mongo"]["uri"]
-    ca = certifi.where()
-    client = MongoClient(uri, tls=True, tlsCAFile=ca)
+    client = MongoClient(st.secrets["mongo"]["uri"], tls=True, tlsCAFile=certifi.where())
     db = client["Elhub"]
-    collection = db["Data"]
-    data = list(collection.find())
-    if not data:
-        return pd.DataFrame()
-    df = pd.DataFrame(data)
+    df = pd.DataFrame(list(db["Data"].find()))
+    if df.empty:
+        return df
     df["starttime"] = pd.to_datetime(df["starttime"])
     df = df.groupby(["pricearea", "productiongroup", "starttime"], as_index=False).agg({"quantitykwh": "sum"})
     df.set_index("starttime", inplace=True)
     return df
 
-@st.cache_data(show_spinner="Loading Consumption data...")
+@st.cache_data(show_spinner="Loading consumption data...")
 def load_consumption():
-    uri = st.secrets["mongo"]["uri"]
-    ca = certifi.where()
-    client = MongoClient(uri, tls=True, tlsCAFile=ca)
+    client = MongoClient(st.secrets["mongo"]["uri"], tls=True, tlsCAFile=certifi.where())
     db = client["Consumption_Elhub"]
-    collection = db["Data"]
-    data = list(collection.find())
-    if not data:
-        return pd.DataFrame()
-    df = pd.DataFrame(data)
+    df = pd.DataFrame(list(db["Data"].find()))
+    if df.empty:
+        return df
     df["starttime"] = pd.to_datetime(df["starttime"])
     df = df.groupby(["pricearea", "consumptiongroup", "starttime"], as_index=False).agg({"quantitykwh": "sum"})
     df.set_index("starttime", inplace=True)
@@ -67,86 +65,79 @@ def load_consumption():
 prod_df = load_production()
 cons_df = load_consumption()
 
-# ------------------------------------------------------------------------------
-# User selections
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# User selection
+# --------------------------------------------------------------------------
 data_type = st.radio("Select data type:", ["Production", "Consumption"], horizontal=True)
 df = prod_df if data_type == "Production" else cons_df
 group_col = "productiongroup" if data_type == "Production" else "consumptiongroup"
 
 groups = sorted(df[group_col].unique())
-selected_group = st.selectbox("Select group:", groups)
-
+selected_group = st.selectbox("Choose group:", groups)
 days = st.number_input("Time interval (days):", min_value=1, max_value=90, value=7)
 
-# ------------------------------------------------------------------------------
-# Compute mean per area and store in session state
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Compute area means
+# --------------------------------------------------------------------------
 def compute_area_means():
     df_group = df[df[group_col] == selected_group]
     if df_group.empty:
         return {}
-    end_time = df_group.index.max()
-    start_time = end_time - timedelta(days=days)
-    df_interval = df_group[(df_group.index >= start_time) & (df_group.index <= end_time)]
-    return df_interval.groupby("pricearea")["quantitykwh"].mean().to_dict()
+    end = df_group.index.max()
+    start = end - timedelta(days=days)
+    interval = df_group[(df_group.index >= start) & (df_group.index <= end)]
+    return interval.groupby("pricearea")["quantitykwh"].mean().to_dict()
 
-st.session_state.area_means = compute_area_means()
-area_means = st.session_state.area_means
+area_means = compute_area_means()
+st.session_state.area_means = area_means
 
 if not area_means:
-    st.warning("No data available for this selection.")
+    st.warning("No data available for this filter.")
     st.stop()
 
-# ------------------------------------------------------------------------------
-# Color function based on area means
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Color scale
+# --------------------------------------------------------------------------
 vals = list(area_means.values())
-if vals:
-    vmin, vmax = min(vals), max(vals)
-else:
-    vmin, vmax = 0, 1
+vmin, vmax = min(vals), max(vals)
 
 def get_color(value):
     if vmin == vmax:
-        return "#ffff00"  # yellow if all values are equal
-    norm = (value - vmin) / (vmax - vmin)
-    r = int(255 * (1 - norm))
-    g = int(255 * norm)
+        return "#ffff00"
+    t = (value - vmin) / (vmax - vmin)
+    r = int(255 * (1 - t))
+    g = int(255 * t)
     return f"#{r:02x}{g:02x}00"
 
-# ------------------------------------------------------------------------------
-# Build Folium map
-# ------------------------------------------------------------------------------
-m = folium.Map(location=[63.0, 10.5], zoom_start=5.5)
+# --------------------------------------------------------------------------
+# Folium map
+# --------------------------------------------------------------------------
+m = folium.Map(location=[63, 10], zoom_start=5.3)
 
 def style_function(feature):
-    area = feature["properties"]["ElSpotOmr"]
-    if area in area_means:
-        fill = get_color(area_means[area])
-    else:
-        fill = "#cccccc"  # light grey for areas without data
-    if st.session_state.selected_area == area:
-        return {"fillColor": fill, "color": "red", "weight": 3, "fillOpacity": 0.6}
-    return {"fillColor": fill, "color": "blue", "weight": 1, "fillOpacity": 0.6}
+    area_name = extract_area_name(feature)
+    color = get_color(area_means.get(area_name, vmin))
+
+    if st.session_state.selected_area == area_name:
+        return {"fillColor": color, "color": "red", "weight": 3, "fillOpacity": 0.55}
+
+    return {"fillColor": color, "color": "blue", "weight": 1, "fillOpacity": 0.55}
 
 folium.GeoJson(
     geojson_data,
+    name="Price Areas",
     style_function=style_function,
-    tooltip=folium.GeoJsonTooltip(fields=["ElSpotOmr"], aliases=["Price area:"])
+    tooltip=folium.GeoJsonTooltip(fields=["Elspot_omr"], aliases=["Area:"])
 ).add_to(m)
 
-# Add marker for clicked point
+# Marker
 if st.session_state.clicked_point:
-    folium.Marker(
-        st.session_state.clicked_point,
-        icon=folium.Icon(color="red", icon="info-sign")
-    ).add_to(m)
+    folium.Marker(st.session_state.clicked_point, icon=folium.Icon(color="red")).add_to(m)
 
-# ------------------------------------------------------------------------------
-# Click handler
-# ------------------------------------------------------------------------------
-map_data = st_folium(m, width=900, height=600)
+# --------------------------------------------------------------------------
+# Click handling
+# --------------------------------------------------------------------------
+map_data = st_folium(m, width=1000, height=650)
 
 if map_data and map_data.get("last_clicked"):
     lat = map_data["last_clicked"]["lat"]
@@ -154,21 +145,24 @@ if map_data and map_data.get("last_clicked"):
     st.session_state.clicked_point = (lat, lon)
 
     point = Point(lon, lat)
+
     clicked_area = None
     for feature in geojson_data["features"]:
-        polygon = shape(feature["geometry"])
-        if polygon.contains(point):
-            clicked_area = feature["properties"]["ElSpotOmr"]
+        geom = shape(feature["geometry"])
+        if isinstance(geom, (Polygon, MultiPolygon)) and geom.contains(point):
+            clicked_area = extract_area_name(feature)
             break
+
     st.session_state.selected_area = clicked_area
     st.rerun()
 
-# ------------------------------------------------------------------------------
-# Display information
-# ------------------------------------------------------------------------------
-st.write("### Mean values per area:")
+# --------------------------------------------------------------------------
+# Output
+# --------------------------------------------------------------------------
+st.subheader("Mean values per area:")
 st.json(area_means)
 
 if st.session_state.selected_area:
-    st.success(f"Selected area: **{st.session_state.selected_area}**")
-st.write(f"Clicked coordinates: {st.session_state.clicked_point}")
+    st.success(f"Selected Price Area: {st.session_state.selected_area}")
+
+st.write(f"Clicked point: {st.session_state.clicked_point}")
