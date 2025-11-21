@@ -99,13 +99,18 @@ if not area_means:
     st.stop()
 
 # ------------------------------------------------------------------------------
-# Color function based on current session state
+# Color function based on area means
 # ------------------------------------------------------------------------------
 vals = list(area_means.values())
-vmin, vmax = min(vals), max(vals)
+if vals:
+    vmin, vmax = min(vals), max(vals)
+else:
+    vmin, vmax = 0, 1
 
 def get_color(value):
-    norm = (value - vmin) / (vmax - vmin + 1e-9)
+    if vmin == vmax:
+        return "#ffff00"  # yellow if all values are equal
+    norm = (value - vmin) / (vmax - vmin)
     r = int(255 * (1 - norm))
     g = int(255 * norm)
     return f"#{r:02x}{g:02x}00"
@@ -117,10 +122,13 @@ m = folium.Map(location=[63.0, 10.5], zoom_start=5.5)
 
 def style_function(feature):
     area = feature["properties"]["ElSpotOmr"]
-    fill = get_color(area_means.get(area, 0))
+    if area in area_means:
+        fill = get_color(area_means[area])
+    else:
+        fill = "#cccccc"  # light grey for areas without data
     if st.session_state.selected_area == area:
         return {"fillColor": fill, "color": "red", "weight": 3, "fillOpacity": 0.6}
-    return {"fillColor": fill, "color": "blue", "weight": 1, "fillOpacity": 0.4}
+    return {"fillColor": fill, "color": "blue", "weight": 1, "fillOpacity": 0.6}
 
 folium.GeoJson(
     geojson_data,
