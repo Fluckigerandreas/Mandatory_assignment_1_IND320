@@ -95,10 +95,16 @@ def plot_wind_rose(avg_sector_values, overall_avg):
     )
     st.plotly_chart(fig)
 
-# ------------------- Open-Meteo ERA5 downloader -------------------
+# ------------------- Open-Meteo ERA5 downloader with caching -------------------
+# Requests-cache session
+session = requests_cache.CachedSession(".cache", expire_after=86400)  # cache for 1 day
+
 @st.cache_data(show_spinner="Downloading weather data...")
 def download_era5_openmeteo(lat, lon, year, timezone="Europe/Oslo"):
-    session = requests_cache.CachedSession(".cache", expire_after=-1)
+    """
+    Downloads weather data from Open-Meteo or fetches from requests_cache if available.
+    Returns a dataframe with UTC-aware datetime index.
+    """
     url = "https://archive-api.open-meteo.com/v1/archive"
     params = {
         "latitude": lat,
@@ -114,7 +120,7 @@ def download_era5_openmeteo(lat, lon, year, timezone="Europe/Oslo"):
     response.raise_for_status()
     data = response.json()
     df = pd.DataFrame(data['hourly'])
-    df['time'] = pd.to_datetime(df['time'], utc=True)  # Make index UTC-aware
+    df['time'] = pd.to_datetime(df['time'], utc=True)
     df = df.set_index('time')
     df['season'] = df.index.to_series().apply(lambda dt: dt.year if dt.month >= 7 else dt.year - 1)
     return df
@@ -162,7 +168,6 @@ if map_data and map_data.get("last_clicked"):
             clicked_area = feature["properties"]["ElSpotOmr"]
             break
     st.session_state.selected_area = clicked_area
-    # No need for experimental_rerun
 
 # --- Snow drift calculation ---
 if st.session_state.selected_area and st.session_state.clicked_point:
@@ -176,6 +181,7 @@ if st.session_state.selected_area and st.session_state.clicked_point:
     F = 30000
     theta = 0.5
 
+    # Download with caching
     all_years_df = []
     for year in range(start_year, end_year + 1):
         df_year = download_era5_openmeteo(lat, lon, year)
