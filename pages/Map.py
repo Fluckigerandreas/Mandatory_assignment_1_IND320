@@ -4,6 +4,7 @@ from streamlit_folium import st_folium
 import json
 from shapely.geometry import shape, Point
 import pandas as pd
+import numpy as np
 from datetime import timedelta
 from pymongo import MongoClient
 import certifi
@@ -121,7 +122,14 @@ choropleth_df = pd.DataFrame({
 # Scale values to millions for legend readability
 choropleth_df["mean_value_millions"] = choropleth_df["mean_value"] / 1_000_000
 
-# Add choropleth
+# Compute bins for color thresholds (5 bins)
+bins = list(np.linspace(
+    choropleth_df["mean_value_millions"].min(),
+    choropleth_df["mean_value_millions"].max(),
+    6
+))
+
+# Add choropleth with explicit bins
 folium.Choropleth(
     geo_data=geojson_data,
     name="Mean Values",
@@ -131,7 +139,9 @@ folium.Choropleth(
     fill_color="YlOrRd",
     fill_opacity=0.7,
     line_opacity=0.5,
-    legend_name=f"Mean {selected_group} ({data_type}) M kWh"
+    legend_name=f"Mean {selected_group} ({data_type}) M kWh",
+    threshold_scale=bins,
+    reset=True
 ).add_to(m)
 
 # Overlay GeoJson to allow selection highlighting
@@ -146,7 +156,7 @@ def style_function(feature):
         }
     else:
         return {
-            "fillColor": "#00000000",  # Transparent fill to not overwrite choropleth
+            "fillColor": "#00000000",  # Transparent fill so choropleth color shows through
             "color": "black",
             "weight": 1,
             "fillOpacity": 0
