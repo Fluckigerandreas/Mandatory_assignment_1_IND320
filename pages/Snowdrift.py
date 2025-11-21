@@ -40,8 +40,10 @@ def compute_yearly_results(df, T, F, theta):
     seasons = sorted(df['season'].unique())
     results_list = []
     for s in seasons:
-        season_start = pd.Timestamp(year=s, month=7, day=1)
-        season_end = pd.Timestamp(year=s+1, month=6, day=30, hour=23, minute=59, second=59)
+        # Make timestamps UTC-aware
+        season_start = pd.Timestamp(year=s, month=7, day=1, tz='UTC')
+        season_end = pd.Timestamp(year=s+1, month=6, day=30, hour=23, minute=59, second=59, tz='UTC')
+        
         df_season = df[(df.index >= season_start) & (df.index <= season_end)].copy()
         if df_season.empty:
             continue
@@ -112,7 +114,7 @@ def download_era5_openmeteo(lat, lon, year, timezone="Europe/Oslo"):
     response.raise_for_status()
     data = response.json()
     df = pd.DataFrame(data['hourly'])
-    df['time'] = pd.to_datetime(df['time'], utc=True)  # Fix FutureWarning
+    df['time'] = pd.to_datetime(df['time'], utc=True)  # Make index UTC-aware
     df = df.set_index('time')
     df['season'] = df.index.to_series().apply(lambda dt: dt.year if dt.month >= 7 else dt.year - 1)
     return df
@@ -160,7 +162,7 @@ if map_data and map_data.get("last_clicked"):
             clicked_area = feature["properties"]["ElSpotOmr"]
             break
     st.session_state.selected_area = clicked_area
-    # Removed st.experimental_rerun()
+    # No need for experimental_rerun
 
 # --- Snow drift calculation ---
 if st.session_state.selected_area and st.session_state.clicked_point:
@@ -200,3 +202,4 @@ if st.session_state.selected_area and st.session_state.clicked_point:
         plot_wind_rose(avg_sectors, overall_avg)
 else:
     st.info("Click on the map to select a location.")
+
