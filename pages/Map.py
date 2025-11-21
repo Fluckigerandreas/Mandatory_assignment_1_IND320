@@ -3,11 +3,10 @@ import folium
 from streamlit_folium import st_folium
 import json
 from shapely.geometry import shape, Point
-import pandas as pd
 from datetime import timedelta
 from pymongo import MongoClient
 import certifi
-from matplotlib.colors import LinearSegmentedColormap, Normalize, to_hex
+import pandas as pd
 
 # ------------------------------------------------------------------------------
 # Page title
@@ -15,9 +14,9 @@ from matplotlib.colors import LinearSegmentedColormap, Normalize, to_hex
 st.title("Energy Map – Norway Price Areas (NO1–NO5)")
 
 # ------------------------------------------------------------------------------
-# Load GeoJSON for price areas
+# Load GeoJSON
 # ------------------------------------------------------------------------------
-geojson_path = "file.geojson"  # your local GeoJSON path
+geojson_path = "file.geojson"  # replace with your GeoJSON path
 with open(geojson_path, "r", encoding="utf-8") as f:
     geojson_data = json.load(f)
 
@@ -29,6 +28,9 @@ if "clicked_point" not in st.session_state:
 
 if "selected_area" not in st.session_state:
     st.session_state.selected_area = None
+
+if "area_means" not in st.session_state:
+    st.session_state.area_means = None
 
 # ------------------------------------------------------------------------------
 # MongoDB loaders
@@ -98,88 +100,61 @@ if not area_means:
     st.warning("No data available for this selection.")
     st.stop()
 
-# ------------------------------------------------------------------------------
-# Prepare normalization and custom color spectrum
-# ------------------------------------------------------------------------------
-vmin = min(area_means.values())
-vmax = max(area_means.values())
-if vmax - vmin < 1e-9:
-    vmax = vmin + 1e-9
-
-norm = Normalize(vmin=vmin, vmax=vmax)
-cmap = LinearSegmentedColormap.from_list("custom_spectrum", ["green", "blue", "yellow"])
+st.session_state.area_means = area_means
 
 # ------------------------------------------------------------------------------
-# Define style function for Folium
+# Color function (exactly as in your example)
 # ------------------------------------------------------------------------------
-def style_function(feature):
-    area = feature["properties"]["ElSpotOmr"]
-    if area in area_means:
-        normalized_val = norm(area_means[area])
-        color = to_hex(cmap(normalized_val))
-    else:
-        color = "#cccccc"
-    
-    if area == st.session_state.selected_area:
-        return {
-            "fillColor": color,
-            "color": "red",
-            "weight": 3,
-            "fillOpacity": 0.7,
-        }
-    else:
-        return {
-            "fillColor": color,
-            "color": "black",
-            "weight": 1,
-            "fillOpacity": 0.5,
-        }
+vals = list(area_means.values())
+vmin, vmax = min(vals), max(vals)
+
+def get_color(value):
+    norm = (value - vmin) / (vmax - vmin + 1e-9)
+    r = int(255 * (1 - norm))
+    g = int(255 * norm)
+    return f"#{r:02x}{g:02x}00"
 
 # ------------------------------------------------------------------------------
 # Build Folium map
 # ------------------------------------------------------------------------------
-m = folium.Map(location=[63.0, 10.5], zoom_start=5.2)
+m = folium.Map(location=[63.0, 10.5], zoom_start=5.5)
+
+def style_function(feature):
+    area = feature["properties"]["ElSpotOmr"]
+    fill = get_color(area_means[area]) if area in area_means else "#cccccc"
+    if st.session_state.selected_area == area:
+        return {"fillColor": fill, "color": "red", "weight": 3, "fillOpacity": 0.6}
+    return {"fillColor": fill, "color": "blue", "weight": 1, "fillOpacity": 0.4}
 
 folium.GeoJson(
     geojson_data,
-    name="NO Areas",
     style_function=style_function,
     tooltip=folium.GeoJsonTooltip(fields=["ElSpotOmr"], aliases=["Price area:"])
 ).add_to(m)
 
-# Marker for clicked point
 if st.session_state.clicked_point:
     folium.Marker(
         st.session_state.clicked_point,
         icon=folium.Icon(color="red", icon="info-sign")
     ).add_to(m)
 
+# ------------------------------------------------------------------------------
+# Click handler
+# ------------------------------------------------------------------------------
 map_data = st_folium(m, width=900, height=600)
 
-# ------------------------------------------------------------------------------
-# Show clicked coordinates
-# ------------------------------------------------------------------------------
-if map_data and map_data.get("last_clicked"):
-    lat = map_data["last_clicked"]["lat"]
-    lon = map_data["last_clicked"]["lng"]
-    st.write(f"**Clicked coordinates:** Latitude = {lat:.5f}, Longitude = {lon:.5f}")
-
-# ------------------------------------------------------------------------------
-# Detect selected area
-# ------------------------------------------------------------------------------
 if map_data and map_data.get("last_clicked"):
     lat = map_data["last_clicked"]["lat"]
     lon = map_data["last_clicked"]["lng"]
     st.session_state.clicked_point = (lat, lon)
 
-    p = Point(lon, lat)
+    point = Point(lon, lat)
     clicked_area = None
     for feature in geojson_data["features"]:
         polygon = shape(feature["geometry"])
-        if polygon.contains(p):
+        if polygon.contains(point):
             clicked_area = feature["properties"]["ElSpotOmr"]
             break
-
     st.session_state.selected_area = clicked_area
     st.rerun()
 
