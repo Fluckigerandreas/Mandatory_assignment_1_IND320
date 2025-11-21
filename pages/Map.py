@@ -73,12 +73,14 @@ if "area_means" not in st.session_state:
 # MongoDB Loaders
 # ==============================================================================
 @st.cache_data(show_spinner="Loading production data...")
+@st.cache_data(show_spinner="Loading production data...")
 def load_production():
     client = MongoClient(st.secrets["mongo"]["uri"], tls=True, tlsCAFile=certifi.where())
-    db = client["example"]
-    df = pd.DataFrame(list(db["data"].find()))
+    db = client["Elhub"]
+    df = pd.DataFrame(list(db["Data"].find()))
     if df.empty:
         return df
+    # Convert to datetime with UTC
     df["starttime"] = pd.to_datetime(df["starttime"], utc=True)
     if "pricearea" in df.columns:
         df["pricearea"] = df["pricearea"].apply(normalize_to_NO)
@@ -120,6 +122,8 @@ if not groups:
     st.stop()
 
 selected_group = st.selectbox("Select group:", groups)
+
+# Year filter
 selected_year = st.selectbox("Select year:", [2021, 2022, 2023, 2024])
 
 # ==============================================================================
@@ -130,16 +134,16 @@ def compute_area_means():
     if df_group.empty:
         return {}
 
+    # Ensure index is DatetimeIndex
     if not isinstance(df_group.index, pd.DatetimeIndex):
-        df_group.index = pd.to_datetime(df_group.index, utc=True)
+        df_group.index = pd.to_datetime(df_group.index)
 
     df_group["year"] = df_group.index.year
-    df_year = df_group[df_group["year"] == selected_year].copy()  # explicit copy
-
+    df_year = df_group[df_group["year"] == selected_year]
     if df_year.empty:
         return {}
 
-    df_year.loc[:, "pricearea"] = df_year["pricearea"].apply(normalize_to_NO)
+    df_year["pricearea"] = df_year["pricearea"].apply(normalize_to_NO)
     df_year = df_year[df_year["pricearea"].notna()]
 
     means = df_year.groupby("pricearea")["quantitykwh"].mean().to_dict()
@@ -153,10 +157,11 @@ if not area_means:
     st.stop()
 
 # ==============================================================================
-# Sidebar debug
+# Debug: show mapping between geojson areas and normalized codes
 # ==============================================================================
 st.sidebar.write("GeoJSON -> normalized area (sample):")
-st.sidebar.json({i: v for i, v in list(geo_feature_area.items())})
+sample_map = {i: v for i, v in list(geo_feature_area.items())}
+st.sidebar.json(sample_map)
 
 # ==============================================================================
 # Color scale using branca
@@ -209,7 +214,7 @@ if st.session_state.clicked_point:
     ).add_to(m)
 
 # ==============================================================================
-# Click handler (reactive)
+# Click handler
 # ==============================================================================
 map_data = st_folium(m, width=1000, height=700)
 
@@ -227,7 +232,6 @@ if map_data and map_data.get("last_clicked"):
             break
 
     st.session_state.selected_area = clicked_area
-    # no need for experimental_rerun; map will update on next interaction
 
 # ==============================================================================
 # Display info
@@ -239,4 +243,3 @@ if st.session_state.selected_area:
     st.success(f"Selected area: **{st.session_state.selected_area}**")
 
 st.write(f"Clicked coordinates: {st.session_state.clicked_point}")
-
