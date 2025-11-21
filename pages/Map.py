@@ -75,8 +75,8 @@ if "area_means" not in st.session_state:
 @st.cache_data(show_spinner="Loading production data...")
 def load_production():
     client = MongoClient(st.secrets["mongo"]["uri"], tls=True, tlsCAFile=certifi.where())
-    db = client["Elhub"]
-    df = pd.DataFrame(list(db["Data"].find()))
+    db = client["example"]
+    df = pd.DataFrame(list(db["data"].find()))
     if df.empty:
         return df
     df["starttime"] = pd.to_datetime(df["starttime"], utc=True)
