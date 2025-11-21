@@ -5,65 +5,42 @@ import certifi
 import plotly.express as px
 
 # -------------------------------
-# CACHE DATA LOADING
+# LOAD PRODUCTION DATA
 # -------------------------------
-@st.cache_data(show_spinner="Loading data from MongoDB...")
-def load_data():
-    """Load data from MongoDB with caching."""
-    uri = st.secrets["mongo"]["uri"]
-    ca = certifi.where()
-    client = MongoClient(uri, tls=True, tlsCAFile=ca)
-    db = client['Elhub']
-    collection = db['Data']
+@st.cache_data(show_spinner="Loading production data...")
+def load_production_years():
+    client = MongoClient(st.secrets["mongo"]["uri"], tls=True, tlsCAFile=certifi.where())
+    db = client["Elhub"]
+    df = pd.DataFrame(list(db["Data"].find()))
+    
+    if df.empty:
+        return pd.DataFrame()  # empty fallback
 
-    data = list(collection.find())
-    if not data:
-        return pd.DataFrame()  # Empty DataFrame fallback
-
-    df = pd.DataFrame(data)
-
-    # Force conversion to datetime
-    df["starttime"] = pd.to_datetime(df["starttime"], errors="coerce")
+    # Convert starttime to datetime safely
+    df["starttime"] = pd.to_datetime(df["starttime"], errors="coerce", utc=True)
     df = df.dropna(subset=["starttime"])
 
-    # Remove duplicates
-    df = df.drop_duplicates(subset=["pricearea", "productiongroup", "starttime"], keep="first").reset_index(drop=True)
-    return df
+    # Extract year
+    df["year"] = df["starttime"].dt.year
+
+    return df[["pricearea", "productiongroup", "year"]]
 
 # -------------------------------
 # STREAMLIT APP
 # -------------------------------
-st.title("Check MongoDB Data by Year")
+st.title("Production Years from Elhub")
 
-df = load_data()
+prod_df = load_production_years()
 
-if df.empty:
-    st.warning("No data found in MongoDB.")
+if prod_df.empty:
+    st.warning("No production data found in MongoDB.")
 else:
-    # Extract year
-    df["year"] = df["starttime"].dt.year
-
-    # Choose category to inspect
+    # Let user choose category
     category = st.selectbox("Select category", options=["pricearea", "productiongroup"])
 
-    # Group by category and list unique years
-    unique_years = df.groupby(category)["year"].unique().reset_index()
+    # Show unique years per category
+    unique_years = prod_df.groupby(category)["year"].unique().reset_index()
     unique_years["year"] = unique_years["year"].apply(lambda x: sorted(list(x)))
 
-    st.subheader(f"Unique Years for Each {category.capitalize()}")
+    st.subheader(f"Unique Years for each {category.capitalize()}")
     st.dataframe(unique_years)
-
-    # Optional: plot years per category
-    st.subheader(f"Years Distribution per {category.capitalize()}")
-    # Explode the list of years so we can plot
-    exploded_df = unique_years.explode("year")
-    fig = px.bar(
-        exploded_df,
-        x=category,
-        y="year",
-        text="year",
-        title=f"Years available for each {category}",
-        labels={"year": "Year", category: category.capitalize()},
-        height=400
-    )
-    st.plotly_chart(fig, use_container_width=True)

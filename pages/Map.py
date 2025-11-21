@@ -77,14 +77,24 @@ def load_production():
     client = MongoClient(st.secrets["mongo"]["uri"], tls=True, tlsCAFile=certifi.where())
     db = client["Elhub"]
     df = pd.DataFrame(list(db["Data"].find()))
+    
     if df.empty:
         return df
-    # Convert to datetime with UTC
-    df["starttime"] = pd.to_datetime(df["starttime"], utc=True)
+
+    # Convert starttime to datetime safely
+    df["starttime"] = pd.to_datetime(df["starttime"], errors="coerce", utc=True)
+    df = df.dropna(subset=["starttime"])
+
+    # Normalize pricearea
     if "pricearea" in df.columns:
         df["pricearea"] = df["pricearea"].apply(normalize_to_NO)
+
+    # Aggregate quantitykwh per unique combination
     df = df.groupby(["pricearea", "productiongroup", "starttime"], as_index=False).agg({"quantitykwh": "sum"})
+
+    # Set starttime as index (required for your later computations)
     df.set_index("starttime", inplace=True)
+
     return df
 
 @st.cache_data(show_spinner="Loading consumption data...")
