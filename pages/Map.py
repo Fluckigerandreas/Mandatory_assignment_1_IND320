@@ -8,6 +8,8 @@ import numpy as np
 from datetime import timedelta
 from pymongo import MongoClient
 import certifi
+from matplotlib import cm
+from matplotlib.colors import to_hex, Normalize
 
 # ------------------------------------------------------------------------------
 # Page title
@@ -109,62 +111,56 @@ if not area_means:
     st.stop()
 
 # ------------------------------------------------------------------------------
-# Create map
+# Prepare normalization for coloring
 # ------------------------------------------------------------------------------
-m = folium.Map(location=[63.0, 10.5], zoom_start=5.2)
+vmin = min(area_means.values())
+vmax = max(area_means.values())
+if vmax - vmin < 1e-9:
+    vmax = vmin + 1e-9  # avoid zero division
 
-# Create DataFrame for choropleth
-choropleth_df = pd.DataFrame({
-    "pricearea": list(area_means.keys()),
-    "mean_value": list(area_means.values())
-})
+norm = Normalize(vmin=vmin, vmax=vmax)
+cmap = cm.get_cmap("YlOrRd")
 
-# Scale values to millions for legend readability
-choropleth_df["mean_value_millions"] = choropleth_df["mean_value"] / 1_000_000
+# Show min/max values to help debug scale
+st.write(f"Min mean value: {vmin:.5f}")
+st.write(f"Max mean value: {vmax:.5f}")
 
-# Compute bins for color thresholds (5 bins)
-bins = list(np.linspace(
-    choropleth_df["mean_value_millions"].min(),
-    choropleth_df["mean_value_millions"].max(),
-    6
-))
-
-# Add choropleth with explicit bins
-folium.Choropleth(
-    geo_data=geojson_data,
-    name="Mean Values",
-    data=choropleth_df,
-    columns=["pricearea", "mean_value_millions"],
-    key_on="feature.properties.ElSpotOmr",
-    fill_color="YlOrRd",
-    fill_opacity=0.7,
-    line_opacity=0.5,
-    legend_name=f"Mean {selected_group} ({data_type}) M kWh",
-    threshold_scale=bins,
-    reset=True
-).add_to(m)
-
-# Overlay GeoJson to allow selection highlighting
+# ------------------------------------------------------------------------------
+# Define style function for GeoJson coloring based on mean values
+# ------------------------------------------------------------------------------
 def style_function(feature):
     area = feature["properties"]["ElSpotOmr"]
+    if area in area_means:
+        normalized_val = norm(area_means[area])
+        # Debug output for normalized values
+        st.write(f"{area}: mean={area_means[area]:.2f}, normalized={normalized_val:.4f}")
+        color = to_hex(cmap(normalized_val))
+    else:
+        color = "#cccccc"  # gray for missing data
+    
     if area == st.session_state.selected_area:
         return {
-            "fillColor": "#0000ff",  # Highlight selected area in blue
+            "fillColor": color,
             "color": "red",
             "weight": 3,
-            "fillOpacity": 0.4
+            "fillOpacity": 0.7,
         }
     else:
         return {
-            "fillColor": "#00000000",  # Transparent fill so choropleth color shows through
+            "fillColor": color,
             "color": "black",
             "weight": 1,
-            "fillOpacity": 0
+            "fillOpacity": 0.5,
         }
+
+# ------------------------------------------------------------------------------
+# Build map
+# ------------------------------------------------------------------------------
+m = folium.Map(location=[63.0, 10.5], zoom_start=5.2)
 
 folium.GeoJson(
     geojson_data,
-    name="Selection",
+    name="NO Areas",
     style_function=style_function,
     tooltip=folium.GeoJsonTooltip(fields=["ElSpotOmr"], aliases=["Price area:"])
 ).add_to(m)
@@ -179,7 +175,7 @@ if st.session_state.clicked_point:
 map_data = st_folium(m, width=900, height=600)
 
 # ------------------------------------------------------------------------------
-# Show clicked coordinates
+# Show clicked coordinates below map
 # ------------------------------------------------------------------------------
 if map_data and map_data.get("last_clicked"):
     lat = map_data["last_clicked"]["lat"]
@@ -194,7 +190,6 @@ if map_data and map_data.get("last_clicked"):
     lon = map_data["last_clicked"]["lng"]
     st.session_state.clicked_point = (lat, lon)
 
-    # Detect area
     p = Point(lon, lat)
     clicked_area = None
     for feature in geojson_data["features"]:
@@ -207,7 +202,7 @@ if map_data and map_data.get("last_clicked"):
     st.rerun()
 
 # ------------------------------------------------------------------------------
-# Diagnostics
+# Diagnostics: show mean values JSON and selected area
 # ------------------------------------------------------------------------------
 st.write("### Mean values per area:")
 st.json(area_means)
