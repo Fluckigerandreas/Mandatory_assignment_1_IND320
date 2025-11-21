@@ -174,7 +174,7 @@ if st.session_state.selected_area and st.session_state.clicked_point:
     st.success(f"Selected area: **{st.session_state.selected_area}**")
     lat, lon = st.session_state.clicked_point
 
-    start_year = st.number_input("Start Year", min_value=1950, max_value=pd.Timestamp.now().year, value=2020)
+    start_year = st.number_input("Start Year", min_value=1996, max_value=pd.Timestamp.now().year, value=2020)
     end_year = st.number_input("End Year", min_value=start_year, max_value=pd.Timestamp.now().year, value=2022)
 
     T = 3000
