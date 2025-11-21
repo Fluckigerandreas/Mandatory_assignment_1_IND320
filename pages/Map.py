@@ -7,21 +7,29 @@ from datetime import timedelta
 from pymongo import MongoClient
 import certifi
 import pandas as pd
+import matplotlib.pyplot as plt
 
-st.title("Energy Map – Norway Price Areas (NO1–NO5)")
+st.title("Norway Price Areas Map – Elhub Data (NO1–NO5)")
 
+# ------------------------------------------------------------------------------
 # Load GeoJSON
-geojson_path = "file.geojson"
+# ------------------------------------------------------------------------------
+geojson_path = "file.geojson"  # replace with your path
 with open(geojson_path, "r", encoding="utf-8") as f:
     geojson_data = json.load(f)
 
+# ------------------------------------------------------------------------------
 # Session state
+# ------------------------------------------------------------------------------
 if "clicked_point" not in st.session_state:
     st.session_state.clicked_point = None
+
 if "selected_area" not in st.session_state:
     st.session_state.selected_area = None
 
+# ------------------------------------------------------------------------------
 # MongoDB loaders
+# ------------------------------------------------------------------------------
 @st.cache_data(show_spinner="Loading Production data...")
 def load_production():
     uri = st.secrets["mongo"]["uri"]
@@ -57,32 +65,61 @@ def load_consumption():
 prod_df = load_production()
 cons_df = load_consumption()
 
-# Selectors
+# ------------------------------------------------------------------------------
+# User selections
+# ------------------------------------------------------------------------------
 data_type = st.radio("Select data type:", ["Production", "Consumption"], horizontal=True)
-if data_type == "Production":
-    df = prod_df
-    group_col = "productiongroup"
-else:
-    df = cons_df
-    group_col = "consumptiongroup"
+df = prod_df if data_type == "Production" else cons_df
+group_col = "productiongroup" if data_type == "Production" else "consumptiongroup"
 
 groups = sorted(df[group_col].unique())
 selected_group = st.selectbox("Select group:", groups)
+
 days = st.number_input("Time interval (days):", min_value=1, max_value=90, value=7)
 
-# Filter data
+# ------------------------------------------------------------------------------
+# Compute mean per area
+# ------------------------------------------------------------------------------
 df_group = df[df[group_col] == selected_group]
 end_time = df_group.index.max()
 start_time = end_time - timedelta(days=days)
 df_interval = df_group[(df_group.index >= start_time) & (df_group.index <= end_time)]
 
-# Compute mean per price area
 area_means = df_interval.groupby("pricearea")["quantitykwh"].mean().to_dict()
 if not area_means:
     st.warning("No data available for this selection.")
     st.stop()
 
-# Recompute vmin, vmax and color function after each selection
+# ------------------------------------------------------------------------------
+# Extract centroid coordinates
+# ------------------------------------------------------------------------------
+def get_area_centroids():
+    centroids = {}
+    for feature in geojson_data["features"]:
+        name = feature["properties"]["ElSpotOmr"]
+        polygon = shape(feature["geometry"])
+        centroid = polygon.centroid
+        centroids[name] = (centroid.y, centroid.x)  # lat, lon
+    return centroids
+
+centroids = get_area_centroids()
+
+# ------------------------------------------------------------------------------
+# Plot centroids
+# ------------------------------------------------------------------------------
+st.write("### Area centroids:")
+fig, ax = plt.subplots()
+for area, (lat, lon) in centroids.items():
+    ax.plot(lon, lat, "o", label=area)
+ax.set_xlabel("Longitude")
+ax.set_ylabel("Latitude")
+ax.set_title("Price Area Centroids")
+ax.legend()
+st.pyplot(fig)
+
+# ------------------------------------------------------------------------------
+# Color function
+# ------------------------------------------------------------------------------
 vals = list(area_means.values())
 vmin, vmax = min(vals), max(vals)
 
@@ -92,12 +129,14 @@ def get_color(value):
     g = int(255 * norm)
     return f"#{r:02x}{g:02x}00"
 
+# ------------------------------------------------------------------------------
 # Build Folium map
+# ------------------------------------------------------------------------------
 m = folium.Map(location=[63.0, 10.5], zoom_start=5.5)
 
 def style_function(feature):
     area = feature["properties"]["ElSpotOmr"]
-    fill = get_color(area_means[area]) if area in area_means else "#cccccc"
+    fill = get_color(area_means.get(area, 0))
     if st.session_state.selected_area == area:
         return {"fillColor": fill, "color": "red", "weight": 3, "fillOpacity": 0.6}
     return {"fillColor": fill, "color": "blue", "weight": 1, "fillOpacity": 0.4}
@@ -108,15 +147,18 @@ folium.GeoJson(
     tooltip=folium.GeoJsonTooltip(fields=["ElSpotOmr"], aliases=["Price area:"])
 ).add_to(m)
 
+# Add clicked marker
 if st.session_state.clicked_point:
     folium.Marker(
         st.session_state.clicked_point,
         icon=folium.Icon(color="red", icon="info-sign")
     ).add_to(m)
 
+# ------------------------------------------------------------------------------
+# Click handler
+# ------------------------------------------------------------------------------
 map_data = st_folium(m, width=900, height=600)
 
-# Click handler
 if map_data and map_data.get("last_clicked"):
     lat = map_data["last_clicked"]["lat"]
     lon = map_data["last_clicked"]["lng"]
@@ -132,7 +174,9 @@ if map_data and map_data.get("last_clicked"):
     st.session_state.selected_area = clicked_area
     st.rerun()
 
-# Diagnostics
+# ------------------------------------------------------------------------------
+# Display information
+# ------------------------------------------------------------------------------
 st.write("### Mean values per area:")
 st.json(area_means)
 
