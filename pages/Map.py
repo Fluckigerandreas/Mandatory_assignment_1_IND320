@@ -73,13 +73,15 @@ if "area_means" not in st.session_state:
 # MongoDB Loaders
 # ==============================================================================
 @st.cache_data(show_spinner="Loading production data...")
+@st.cache_data(show_spinner="Loading production data...")
 def load_production():
     client = MongoClient(st.secrets["mongo"]["uri"], tls=True, tlsCAFile=certifi.where())
     db = client["Elhub"]
     df = pd.DataFrame(list(db["Data"].find()))
     if df.empty:
         return df
-    df["starttime"] = pd.to_datetime(df["starttime"])
+    # Convert to datetime with UTC
+    df["starttime"] = pd.to_datetime(df["starttime"], utc=True)
     if "pricearea" in df.columns:
         df["pricearea"] = df["pricearea"].apply(normalize_to_NO)
     df = df.groupby(["pricearea", "productiongroup", "starttime"], as_index=False).agg({"quantitykwh": "sum"})
@@ -93,7 +95,7 @@ def load_consumption():
     df = pd.DataFrame(list(db["Data"].find()))
     if df.empty:
         return df
-    df["starttime"] = pd.to_datetime(df["starttime"])
+    df["starttime"] = pd.to_datetime(df["starttime"], utc=True)
     if "pricearea" in df.columns:
         df["pricearea"] = df["pricearea"].apply(normalize_to_NO)
     df = df.groupby(["pricearea", "consumptiongroup", "starttime"], as_index=False).agg({"quantitykwh": "sum"})
