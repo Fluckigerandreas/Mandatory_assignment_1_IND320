@@ -42,10 +42,12 @@ def compute_yearly_results(df, T, F, theta):
     for s in seasons:
         season_start = pd.Timestamp(year=s, month=7, day=1)
         season_end = pd.Timestamp(year=s+1, month=6, day=30, hour=23, minute=59, second=59)
-        df_season = df[(df.index >= season_start) & (df.index <= season_end)]
+        df_season = df[(df.index >= season_start) & (df.index <= season_end)].copy()
         if df_season.empty:
             continue
-        df_season['Swe_hourly'] = df_season.apply(lambda row: row['precipitation'] if row['temperature_2m'] < 1 else 0, axis=1)
+        df_season.loc[:, 'Swe_hourly'] = df_season.apply(
+            lambda row: row['precipitation'] if row['temperature_2m'] < 1 else 0, axis=1
+        )
         total_Swe = df_season['Swe_hourly'].sum()
         wind_speeds = df_season["wind_speed_10m"].tolist()
         result = compute_snow_transport(T, F, theta, total_Swe, wind_speeds)
@@ -57,7 +59,9 @@ def compute_average_sector(df):
     sectors_list = []
     for s, group in df.groupby('season'):
         group = group.copy()
-        group['Swe_hourly'] = group.apply(lambda row: row['precipitation'] if row['temperature_2m'] < 1 else 0, axis=1)
+        group.loc[:, 'Swe_hourly'] = group.apply(
+            lambda row: row['precipitation'] if row['temperature_2m'] < 1 else 0, axis=1
+        )
         ws = group["wind_speed_10m"].tolist()
         wdir = group["wind_direction_10m"].tolist()
         sectors = compute_sector_transport(ws, wdir)
@@ -108,7 +112,7 @@ def download_era5_openmeteo(lat, lon, year, timezone="Europe/Oslo"):
     response.raise_for_status()
     data = response.json()
     df = pd.DataFrame(data['hourly'])
-    df['time'] = pd.to_datetime(df['time'])
+    df['time'] = pd.to_datetime(df['time'], utc=True)  # Fix FutureWarning
     df = df.set_index('time')
     df['season'] = df.index.to_series().apply(lambda dt: dt.year if dt.month >= 7 else dt.year - 1)
     return df
@@ -133,10 +137,16 @@ def style_function(feature):
         return {"fillColor":"red","color":"red","weight":3,"fillOpacity":0.6}
     else:
         return {"fillColor":"blue","color":"blue","weight":1,"fillOpacity":0.3}
-folium.GeoJson(geojson_data, style_function=style_function,
-               tooltip=folium.GeoJsonTooltip(fields=["ElSpotOmr"], aliases=["Area:"])).add_to(m)
+
+folium.GeoJson(
+    geojson_data,
+    style_function=style_function,
+    tooltip=folium.GeoJsonTooltip(fields=["ElSpotOmr"], aliases=["Area:"])
+).add_to(m)
+
 if st.session_state.clicked_point:
     folium.Marker(st.session_state.clicked_point, icon=folium.Icon(color="red")).add_to(m)
+
 map_data = st_folium(m, width=900, height=500)
 
 # --- Handle clicks ---
@@ -150,7 +160,7 @@ if map_data and map_data.get("last_clicked"):
             clicked_area = feature["properties"]["ElSpotOmr"]
             break
     st.session_state.selected_area = clicked_area
-    st.experimental_rerun()
+    # Removed st.experimental_rerun()
 
 # --- Snow drift calculation ---
 if st.session_state.selected_area and st.session_state.clicked_point:
