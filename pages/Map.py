@@ -73,7 +73,6 @@ if "area_means" not in st.session_state:
 # MongoDB Loaders
 # ==============================================================================
 @st.cache_data(show_spinner="Loading production data...")
-@st.cache_data(show_spinner="Loading production data...")
 def load_production():
     client = MongoClient(st.secrets["mongo"]["uri"], tls=True, tlsCAFile=certifi.where())
     db = client["Elhub"]
