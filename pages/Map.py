@@ -8,33 +8,20 @@ from pymongo import MongoClient
 import certifi
 import pandas as pd
 
-# ------------------------------------------------------------------------------
-# Page title
-# ------------------------------------------------------------------------------
 st.title("Energy Map – Norway Price Areas (NO1–NO5)")
 
-# ------------------------------------------------------------------------------
 # Load GeoJSON
-# ------------------------------------------------------------------------------
-geojson_path = "file.geojson"  # replace with your GeoJSON path
+geojson_path = "file.geojson"
 with open(geojson_path, "r", encoding="utf-8") as f:
     geojson_data = json.load(f)
 
-# ------------------------------------------------------------------------------
 # Session state
-# ------------------------------------------------------------------------------
 if "clicked_point" not in st.session_state:
     st.session_state.clicked_point = None
-
 if "selected_area" not in st.session_state:
     st.session_state.selected_area = None
 
-if "area_means" not in st.session_state:
-    st.session_state.area_means = None
-
-# ------------------------------------------------------------------------------
 # MongoDB loaders
-# ------------------------------------------------------------------------------
 @st.cache_data(show_spinner="Loading Production data...")
 def load_production():
     uri = st.secrets["mongo"]["uri"]
@@ -70,11 +57,8 @@ def load_consumption():
 prod_df = load_production()
 cons_df = load_consumption()
 
-# ------------------------------------------------------------------------------
 # Selectors
-# ------------------------------------------------------------------------------
 data_type = st.radio("Select data type:", ["Production", "Consumption"], horizontal=True)
-
 if data_type == "Production":
     df = prod_df
     group_col = "productiongroup"
@@ -86,9 +70,7 @@ groups = sorted(df[group_col].unique())
 selected_group = st.selectbox("Select group:", groups)
 days = st.number_input("Time interval (days):", min_value=1, max_value=90, value=7)
 
-# ------------------------------------------------------------------------------
 # Filter data
-# ------------------------------------------------------------------------------
 df_group = df[df[group_col] == selected_group]
 end_time = df_group.index.max()
 start_time = end_time - timedelta(days=days)
@@ -100,11 +82,7 @@ if not area_means:
     st.warning("No data available for this selection.")
     st.stop()
 
-st.session_state.area_means = area_means
-
-# ------------------------------------------------------------------------------
-# Color function (exactly as in your example)
-# ------------------------------------------------------------------------------
+# Recompute vmin, vmax and color function after each selection
 vals = list(area_means.values())
 vmin, vmax = min(vals), max(vals)
 
@@ -114,9 +92,7 @@ def get_color(value):
     g = int(255 * norm)
     return f"#{r:02x}{g:02x}00"
 
-# ------------------------------------------------------------------------------
 # Build Folium map
-# ------------------------------------------------------------------------------
 m = folium.Map(location=[63.0, 10.5], zoom_start=5.5)
 
 def style_function(feature):
@@ -138,11 +114,9 @@ if st.session_state.clicked_point:
         icon=folium.Icon(color="red", icon="info-sign")
     ).add_to(m)
 
-# ------------------------------------------------------------------------------
-# Click handler
-# ------------------------------------------------------------------------------
 map_data = st_folium(m, width=900, height=600)
 
+# Click handler
 if map_data and map_data.get("last_clicked"):
     lat = map_data["last_clicked"]["lat"]
     lon = map_data["last_clicked"]["lng"]
@@ -158,9 +132,7 @@ if map_data and map_data.get("last_clicked"):
     st.session_state.selected_area = clicked_area
     st.rerun()
 
-# ------------------------------------------------------------------------------
 # Diagnostics
-# ------------------------------------------------------------------------------
 st.write("### Mean values per area:")
 st.json(area_means)
 
