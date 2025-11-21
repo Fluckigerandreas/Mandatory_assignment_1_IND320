@@ -3,18 +3,19 @@ import folium
 from streamlit_folium import st_folium
 import json
 from shapely.geometry import shape, Point
-from pathlib import Path
 import pandas as pd
-import numpy as np
 from datetime import timedelta
 from pymongo import MongoClient
 import certifi
 
 # ------------------------------------------------------------------------------
-# Load GeoJSON for price areas
+# Page title
 # ------------------------------------------------------------------------------
 st.title("Energy Map – Norway Price Areas (NO1–NO5)")
 
+# ------------------------------------------------------------------------------
+# Load GeoJSON for price areas
+# ------------------------------------------------------------------------------
 geojson_path = "file.geojson"
 with open(geojson_path, "r", encoding="utf-8") as f:
     geojson_data = json.load(f)
@@ -46,11 +47,7 @@ def load_production():
 
     df = pd.DataFrame(data)
     df["starttime"] = pd.to_datetime(df["starttime"])
-    df = df.groupby(
-        ["pricearea", "productiongroup", "starttime"],
-        as_index=False
-    ).agg({"quantitykwh": "sum"})
-
+    df = df.groupby(["pricearea", "productiongroup", "starttime"], as_index=False).agg({"quantitykwh": "sum"})
     df.set_index("starttime", inplace=True)
     return df
 
@@ -71,7 +68,6 @@ def load_consumption():
     df = pd.DataFrame(data)
     df["starttime"] = pd.to_datetime(df["starttime"])
     df = df.groupby(["pricearea", "consumptiongroup", "starttime"], as_index=False).agg({"quantitykwh": "sum"})
-
     df.set_index("starttime", inplace=True)
     return df
 
@@ -92,7 +88,6 @@ else:
 
 groups = sorted(df[group_col].unique())
 selected_group = st.selectbox("Select group:", groups)
-
 days = st.number_input("Time interval (days):", min_value=1, max_value=90, value=7)
 
 # ------------------------------------------------------------------------------
@@ -103,67 +98,65 @@ df_group = df[df[group_col] == selected_group]
 # Compute time window
 end_time = df_group.index.max()
 start_time = end_time - timedelta(days=days)
-
 df_interval = df_group[(df_group.index >= start_time) & (df_group.index <= end_time)]
 
 # Compute mean per price area
 area_means = df_interval.groupby("pricearea")["quantitykwh"].mean().to_dict()
 
-# ------------------------------------------------------------------------------
-# Color scale
-# ------------------------------------------------------------------------------
-vals = list(area_means.values())
-if len(vals) == 0:
+if not area_means:
     st.warning("No data available for this selection.")
     st.stop()
 
-vmin, vmax = min(vals), max(vals)
-
-def get_color(value):
-    norm = (value - vmin) / (vmax - vmin + 1e-9)
-    r = int(255 * (1 - norm))
-    g = int(255 * norm)
-    return f"#{r:02x}{g:02x}00"
-
 # ------------------------------------------------------------------------------
-# Folium map style
-# ------------------------------------------------------------------------------
-def style_function(feature):
-    area = feature["properties"]["ElSpotOmr"]
-
-    if area not in area_means:
-        fill = "#cccccc"
-    else:
-        fill = get_color(area_means[area])
-
-    if st.session_state.selected_area == area:
-        return {
-            "fillColor": fill,
-            "color": "red",
-            "weight": 3,
-            "fillOpacity": 0.6
-        }
-
-    return {
-        "fillColor": fill,
-        "color": "blue",
-        "weight": 1,
-        "fillOpacity": 0.4
-    }
-
-# ------------------------------------------------------------------------------
-# Build map
+# Create map
 # ------------------------------------------------------------------------------
 m = folium.Map(location=[63.0, 10.5], zoom_start=5.2)
 
+# Create DataFrame for choropleth
+choropleth_df = pd.DataFrame({
+    "pricearea": list(area_means.keys()),
+    "mean_value": list(area_means.values())
+})
+
+# Add choropleth
+folium.Choropleth(
+    geo_data=geojson_data,
+    name="Mean Values",
+    data=choropleth_df,
+    columns=["pricearea", "mean_value"],
+    key_on="feature.properties.ElSpotOmr",
+    fill_color="YlOrRd",
+    fill_opacity=0.7,
+    line_opacity=0.5,
+    legend_name=f"Mean {selected_group} ({data_type}) kWh"
+).add_to(m)
+
+# Overlay GeoJson to allow selection highlighting
+def style_function(feature):
+    area = feature["properties"]["ElSpotOmr"]
+    if area == st.session_state.selected_area:
+        return {
+            "fillColor": "#0000ff",  # Highlight selected area in blue
+            "color": "red",
+            "weight": 3,
+            "fillOpacity": 0.4
+        }
+    else:
+        return {
+            "fillColor": "#00000000",  # Transparent fill to not overwrite choropleth
+            "color": "black",
+            "weight": 1,
+            "fillOpacity": 0
+        }
+
 folium.GeoJson(
     geojson_data,
-    name="NO Areas",
+    name="Selection",
     style_function=style_function,
     tooltip=folium.GeoJsonTooltip(fields=["ElSpotOmr"], aliases=["Price area:"])
 ).add_to(m)
 
-# Mark clicked point
+# Add marker for clicked point
 if st.session_state.clicked_point:
     folium.Marker(
         st.session_state.clicked_point,
